@@ -58,18 +58,6 @@ python3 -m http.server 8080 --directory "$HOME/code/desk"
 xdg-open "$HOME/code/desk/index.html"
 ```
 
-### Local domain with nginx
-
-For the recommended `desk.local` setup on this machine:
-
-```bash
-bash ~/code/desk/setup-desk.sh
-```
-
-The script generates a self-signed certificate for `desk.local`, registers the nginx config under `/etc/nginx/conf.d/`, and adds the `/etc/hosts` entry. Needs sudo. Open `https://desk.local/` afterwards. The browser will warn about the self-signed cert on first visit — click through.
-
-The nginx config lives at `~/code/nginx-desk.local.conf`. Tweak the `root` directive if the project moves.
-
 ## Development
 
 Requires Node.js ≥ 20 for the lint and typecheck toolchain. The site itself has no build step and no runtime dependencies — `src/` is loaded directly by the browser via native ES modules.
@@ -112,7 +100,6 @@ desk/
 │   ├── dragdrop.js             # Task drag-and-drop
 │   ├── events.js               # Global event wiring
 │   └── types.js                # JSDoc typedefs for Task / Timer
-├── setup-desk.sh               # One-time local-domain setup (nginx + cert + hosts)
 ├── package.json                # Dev scripts and toolchain deps
 ├── eslint.config.js            # ESLint flat config
 ├── .prettierrc.json            # Prettier config

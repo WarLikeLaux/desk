@@ -9,5 +9,4 @@
 - The default timer is 52 min / 17 min Pomodoro. The user wants manual control, not auto-transition. When a phase ends, the timer stops in an `expired` state and waits for the user to click `→ перерыв` or `→ работа`.
 - Notification permission is requested lazily on first timer use. Don't request it on every page load.
 - Do not add network calls beyond the Google Fonts link in `index.html`. Removing the `<link>` is an acceptable customization; replacing it with a different remote service is not.
-- The `setup-desk.sh` script handles nginx + cert + `/etc/hosts` for the `desk.local` domain. It is run manually by the user, not by an agent.
 - CI runs `npm run ci` (format check, ESLint, Stylelint, TypeScript) on every push. Run it locally before committing: `npm run format && npm run lint && npm run lint:css && npm run typecheck`.

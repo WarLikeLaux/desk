@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сегодня — список дел</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <aside class="timers" id="timersPanel" aria-label="Таймеры">
+      <header class="timers-header">
+        <span class="timers-label">Таймеры</span>
+        <span class="timers-count" id="timersCount">0</span>
+      </header>
+      <div class="timers-list" id="timersList"></div>
+      <button class="timers-add" id="addTimer" type="button">
+        <span class="timers-add-glyph" aria-hidden="true">+</span>
+        <span>Новый таймер</span>
+      </button>
+    </aside>
+
+    <section class="todo">
+      <header class="header">
+        <div class="meta">
+          <span class="date" id="date"></span>
+          <span class="progress" aria-label="Прогресс">
+            <span class="progress-done" id="progressDone">0</span>
+            <span class="progress-sep">/</span>
+            <span class="progress-total" id="progressTotal">0</span>
+          </span>
+        </div>
+        <h1 class="title">Сегодня</h1>
+        <p class="subtitle" id="subtitle">Список текущих задач</p>
+      </header>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <span class="composer-glyph" aria-hidden="true">+</span>
+        <input
+          type="text"
+          class="composer-input"
+          id="taskInput"
+          placeholder="Что нужно сделать?"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <kbd class="composer-hint" aria-hidden="true">Enter</kbd>
+      </form>
+
+      <nav class="filters" id="filters" role="tablist">
+        <button class="filter is-active" data-filter="all" type="button">Все <span class="filter-count" data-count="all">0</span></button>
+        <button class="filter" data-filter="active" type="button">Активные <span class="filter-count" data-count="active">0</span></button>
+        <button class="filter" data-filter="completed" type="button">Завершённые <span class="filter-count" data-count="completed">0</span></button>
+      </nav>
+
+      <ul class="tasks" id="taskList" role="list"></ul>
+
+      <div class="empty" id="emptyState" hidden>
+        <div class="empty-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.25">
+            <rect x="6" y="4" width="20" height="24" rx="2"/>
+            <path d="M11 11h10M11 16h10M11 21h6"/>
+          </svg>
+        </div>
+        <p class="empty-title" id="emptyTitle">Список пуст</p>
+        <p class="empty-hint" id="emptyHint">Введите первую задачу и нажмите Enter</p>
+      </div>
+
+      <footer class="footer" id="footer">
+        <span class="remaining" id="remaining">0 осталось</span>
+        <div class="footer-right">
+          <kbd class="kbd-hint" aria-hidden="true">⌘K</kbd>
+          <button class="clear" id="clearCompleted" type="button" hidden>
+            <span class="clear-label">Очистить завершённые</span>
+            <span class="clear-count" id="clearCount">0</span>
+          </button>
+        </div>
+      </footer>
+    </section>
+
+    <aside class="right-panel" aria-label="Боковая панель">
+      <div class="right-panel-empty">
+        <span class="right-panel-dot" aria-hidden="true"></span>
+        <p class="right-panel-text">Свободно</p>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" hidden role="status" aria-live="polite">
+    <span class="toast-text" id="toastText"></span>
+    <button class="toast-action" id="toastAction" type="button">Отменить</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

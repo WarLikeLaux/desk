@@ -1,0 +1,19 @@
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store?
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Editor / OS noise
+.DS_Store
+node_modules/
+*.log
+.env
+.env.local

@@ -1,19 +1,31 @@
+# OS noise
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.DS_Store?
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Desktop.ini
+*~
+*.swp
+*.swo
 
-# Editor / OS noise
-.DS_Store
+# Editors
+.idea/
+.vscode/
+
+# Dependencies
 node_modules/
+
+# Logs
 *.log
+
+# Env
 .env
 .env.local
+
+# Build output
+dist/
+build/
+
+# OS-specific
+.DS_Store?

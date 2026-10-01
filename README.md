@@ -48,7 +48,7 @@ Clearing site data clears the workspace. There is no export, no backup, no sync.
 
 ## Setup
 
-The project is three files. Serve them with any static HTTP server.
+The project is a small set of static files plus a Node dev toolchain for linting and type checking. Open it locally with any static HTTP server; run `npm ci` once to install the dev dependencies if you want to run the checks.
 
 ```bash
 # Python
@@ -70,6 +70,21 @@ The script generates a self-signed certificate for `desk.local`, registers the n
 
 The nginx config lives at `~/code/nginx-desk.local.conf`. Tweak the `root` directive if the project moves.
 
+## Development
+
+Requires Node.js ≥ 20 for the lint and typecheck toolchain. The site itself has no build step and no runtime dependencies — `src/` is loaded directly by the browser via native ES modules.
+
+```bash
+npm ci                # install dev tools (eslint, prettier, stylelint, typescript)
+npm run format        # auto-format JS, CSS, JSON, MD
+npm run lint          # ESLint on src/
+npm run lint:css      # Stylelint on *.css
+npm run typecheck     # tsc --noEmit against JSDoc-annotated JS
+npm run ci            # all of the above (what the CI workflow runs)
+```
+
+GitHub Actions runs `npm run ci` on every push to `main` and on pull requests.
+
 ## Customization
 
 - **Durations**: click "52 мин работа" or "17 мин перерыв" on any timer card.
@@ -81,10 +96,29 @@ The nginx config lives at `~/code/nginx-desk.local.conf`. Tweak the `root` direc
 
 ```
 desk/
-├── index.html        # Three-column layout, no build step
-├── style.css         # All styling, all colors as CSS variables
-├── script.js         # Tasks, timers, localStorage, Web Audio
-└── setup-desk.sh     # One-time local-domain setup (nginx + cert + hosts)
+├── index.html                  # Three-column layout, no build step
+├── style.css                   # All styling, all colors as CSS variables
+├── src/                        # ES modules loaded directly by the browser
+│   ├── main.js                 # Entry point, boots the workspace
+│   ├── state.js                # Shared mutable state
+│   ├── storage.js              # localStorage load/save
+│   ├── dom.js                  # DOM element refs + helpers
+│   ├── utils.js                # Date/pl, formatting helpers
+│   ├── toast.js                # Toast UI
+│   ├── audio.js                # Web Audio beep
+│   ├── notifications.js        # Native notifications
+│   ├── tasks.js                # Task CRUD, render, inline edit
+│   ├── timers.js               # Timer CRUD, render, tick, edit
+│   ├── dragdrop.js             # Task drag-and-drop
+│   ├── events.js               # Global event wiring
+│   └── types.js                # JSDoc typedefs for Task / Timer
+├── setup-desk.sh               # One-time local-domain setup (nginx + cert + hosts)
+├── package.json                # Dev scripts and toolchain deps
+├── eslint.config.js            # ESLint flat config
+├── .prettierrc.json            # Prettier config
+├── .stylelintrc.json           # Stylelint config
+├── tsconfig.json               # TypeScript checker config (JSDoc)
+└── .github/workflows/ci.yml    # GitHub Actions CI
 ```
 
 ## License

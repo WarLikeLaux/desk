@@ -1,0 +1,27 @@
+{
+  "name": "desk",
+  "version": "1.0.0",
+  "description": "Personal desktop workspace: a todolist and a stack of Pomodoro timers in one quiet, dark-themed page.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src",
+    "lint:css": "stylelint \"**/*.css\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run format:check && npm run lint && npm run lint:css && npm run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "globals": "^15.11.0",
+    "prettier": "^3.3.3",
+    "stylelint": "^16.10.0",
+    "stylelint-config-standard": "^36.0.1",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

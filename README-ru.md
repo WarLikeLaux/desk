@@ -48,7 +48,7 @@ desk — личное рабочее пространство на дескто�
 
 ## Установка
 
-Проект — три файла. Подними их любым статическим HTTP-сервером.
+Проект — набор статических файлов плюс Node-тулчейн для линтинга и проверки типов. Открыть локально можно любым статическим HTTP-сервером; `npm ci` нужен только если хочешь запускать проверки.
 
 ```bash
 # Python
@@ -70,6 +70,21 @@ bash ~/code/desk/setup-desk.sh
 
 Конфиг nginx лежит в `~/code/nginx-desk.local.conf`. Если перенесёшь проект — поправь директиву `root`.
 
+## Разработка
+
+Требует Node.js ≥ 20 для тулов. Сам сайт не требует сборки и не имеет рантайм-зависимостей — `src/` грузится браузером напрямую через нативные ES-модули.
+
+```bash
+npm ci                # установка dev-тулов (eslint, prettier, stylelint, typescript)
+npm run format        # автоформат JS, CSS, JSON, MD
+npm run lint          # ESLint на src/
+npm run lint:css      # Stylelint на *.css
+npm run typecheck     # tsc --noEmit по JS с JSDoc-типизацией
+npm run ci            # всё вышеперечисленное (это гоняет CI)
+```
+
+GitHub Actions гоняет `npm run ci` на каждом пуше в `main` и на каждом PR.
+
 ## Кастомизация
 
 - **Длительности**: клик «52 мин работа» или «17 мин перерыв» на любой карточке таймера.
@@ -81,10 +96,29 @@ bash ~/code/desk/setup-desk.sh
 
 ```
 desk/
-├── index.html        # Трёхколоночная раскладка, без сборки
-├── style.css         # Все стили, все цвета как CSS-переменные
-├── script.js         # Задачи, таймеры, localStorage, Web Audio
-└── setup-desk.sh     # Установка локального домена (nginx + серт + hosts)
+├── index.html                  # Трёхколоночная раскладка, без сборки
+├── style.css                   # Все стили, все цвета как CSS-переменные
+├── src/                        # ES-модули, грузятся браузером напрямую
+│   ├── main.js                 # Точка входа, инициализация рабочего пространства
+│   ├── state.js                # Общее мутабельное состояние
+│   ├── storage.js              # localStorage load/save
+│   ├── dom.js                  # Ссылки на DOM-элементы + хелперы
+│   ├── utils.js                # Дата/pl, форматирование
+│   ├── toast.js                # Тосты
+│   ├── audio.js                # Web Audio beep
+│   ├── notifications.js        # Браузерные нотификации
+│   ├── tasks.js                # Задачи: CRUD, рендер, инлайн-редакт
+│   ├── timers.js               # Таймеры: CRUD, рендер, тик, редакт
+│   ├── dragdrop.js             # Drag-and-drop задач
+│   ├── events.js               # Глобальная разводка событий
+│   └── types.js                # JSDoc-типы для Task / Timer
+├── setup-desk.sh               # Установка локального домена (nginx + серт + hosts)
+├── package.json                # Скрипты и dev-зависимости
+├── eslint.config.js            # ESLint flat config
+├── .prettierrc.json            # Prettier config
+├── .stylelintrc.json           # Stylelint config
+├── tsconfig.json               # Конфиг TypeScript-чекера (JSDoc)
+└── .github/workflows/ci.yml    # GitHub Actions CI
 ```
 
 ## Лицензия

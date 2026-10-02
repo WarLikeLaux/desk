@@ -25,7 +25,12 @@
           <span class="timers-count" id="timersCount">0</span>
         </header>
         <div class="timers-list" id="timersList"></div>
-        <button class="timers-add" id="addTimer" type="button">
+        <button
+          class="timers-add"
+          id="addTimer"
+          type="button"
+          title="Клик — Pomodoro (работа + перерыв). Shift+клик — обычный таймер без перерыва."
+        >
           <span class="timers-add-glyph" aria-hidden="true">+</span>
           <span>Новый таймер</span>
         </button>
@@ -93,6 +98,14 @@
         <footer class="footer" id="footer">
           <span class="remaining" id="remaining">0 осталось</span>
           <div class="footer-right">
+            <button
+              class="copy"
+              id="copyTasks"
+              type="button"
+              title="Скопировать задачи текущей вкладки"
+            >
+              Скопировать
+            </button>
             <kbd class="kbd-hint" aria-hidden="true">⌘K</kbd>
             <button class="clear" id="clearCompleted" type="button" hidden>
               <span class="clear-label">Очистить завершённые</span>
@@ -111,6 +124,10 @@
         <div class="notes-list" id="notesList"></div>
       </aside>
     </main>
+
+    <div class="focus-overlay" id="focusOverlay" hidden aria-hidden="true"></div>
+
+    <div class="focus-overlay note-focus" id="noteFocusOverlay" hidden aria-hidden="true"></div>
 
     <div class="toast" id="toast" hidden role="status" aria-live="polite">
       <span class="toast-text" id="toastText"></span>

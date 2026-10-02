@@ -13,11 +13,19 @@
  */
 
 /**
+ * @typedef {'pomodoro' | 'work'} TimerType
+ *
+ * `pomodoro` alternates work -> break -> work, requires a phase toggle.
+ * `work` is a single-phase countdown that never switches.
+ */
+
+/**
  * @typedef {Object} Timer
  * @property {string} id
  * @property {string} name
+ * @property {TimerType} type
  * @property {number} workDuration          seconds
- * @property {number} breakDuration         seconds
+ * @property {number} breakDuration         seconds (unused when type='work')
  * @property {TimerPhase} phase
  * @property {number} startedAt             ms epoch
  * @property {boolean} paused

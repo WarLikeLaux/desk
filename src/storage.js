@@ -6,7 +6,9 @@
 import { state } from './state.js';
 
 const TASKS_KEY = 'todolist-minimal:v2';
-const TIMERS_KEY = 'todolist-minimal:timers:v2';
+const TIMERS_KEY = 'todolist-minimal:timers:v3';
+// Previous versions, kept so existing timers survive the upgrade.
+const TIMERS_KEY_PREVIOUS = ['todolist-minimal:timers:v2', 'todolist-minimal:timers:v1'];
 const NOTES_KEY = 'todolist-minimal:notes:v1';
 
 const isTask =
@@ -43,23 +45,59 @@ export const saveTasks = () => {
   } catch {}
 };
 
+/**
+ * Normalize a raw timer array from any storage version: timers written before
+ * the `type` field existed are Pomodoros.
+ * @param {any[]} arr @returns {Timer[]}
+ */
+const normalizeTimers = (arr) =>
+  arr.filter(isTimer).map((t) => ({
+    ...t,
+    type: t.type === 'work' ? 'work' : 'pomodoro',
+    expired: !!t.expired,
+  }));
+
+/** Read timers from the previous storage versions, or null if they are empty. @returns {Timer[] | null} */
+const loadPreviousTimers = () => {
+  for (const key of TIMERS_KEY_PREVIOUS) {
+    const old = localStorage.getItem(key);
+    if (!old) continue;
+    const arr = JSON.parse(old);
+    if (Array.isArray(arr) && arr.length > 0) return normalizeTimers(arr);
+  }
+  return null;
+};
+
+/**
+ * The seeded timer a broken build wrote into v3 on first load, shadowing the
+ * real data under the previous key: a single untouched 8-hour work timer.
+ * @param {any[]} arr
+ */
+const isShadowingSeed = (arr) =>
+  arr.length === 1 &&
+  arr[0].type === 'work' &&
+  arr[0].name === 'Таймер' &&
+  arr[0].workDuration === 8 * 3600 &&
+  arr[0].breakDuration === 17 * 60 &&
+  arr[0].phase === 'work' &&
+  arr[0].paused === false &&
+  arr[0].pausedDuration === 0 &&
+  !arr[0].expired;
+
 /** @returns {Timer[]} */
 export const loadTimers = () => {
   try {
     const raw = localStorage.getItem(TIMERS_KEY);
-    if (!raw) {
-      const old = localStorage.getItem('todolist-minimal:timers:v1');
-      if (old) {
-        const arr = JSON.parse(old);
-        if (Array.isArray(arr)) {
-          return arr.filter(isTimer).map((t) => ({ ...t, expired: !!t.expired }));
-        }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      if (isShadowingSeed(parsed)) {
+        const recovered = loadPreviousTimers();
+        if (recovered) return recovered;
       }
-      return [];
+      return normalizeTimers(parsed);
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isTimer).map((t) => ({ ...t, expired: !!t.expired }));
+    return loadPreviousTimers() ?? [];
   } catch {
     return [];
   }

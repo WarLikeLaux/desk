@@ -4,7 +4,7 @@
 
 import { state } from './state.js';
 import { saveTasks } from './storage.js';
-import { pluralize, generateId } from './utils.js';
+import { pluralize, generateId, renderTextWithLinks } from './utils.js';
 import { showToast } from './toast.js';
 import {
   $,
@@ -22,11 +22,58 @@ import {
 
 const PENDING_DELETE_TIMEOUT_MS = 3000;
 
+const COMPLETED_COLLAPSE_MAX = 3;
+
 /** @returns {Task[]} */
 export const visibleTasks = () => {
   if (state.filter === 'active') return state.tasks.filter((t) => !t.completed);
   if (state.filter === 'completed') return state.tasks.filter((t) => t.completed);
-  return state.tasks;
+  if (state.showAllCompleted) return state.tasks;
+  const completed = state.tasks.filter((t) => t.completed);
+  if (completed.length <= COMPLETED_COLLAPSE_MAX) return state.tasks;
+  const visibleCompleted = new Set(completed.slice(0, COMPLETED_COLLAPSE_MAX).map((t) => t.id));
+  return state.tasks.filter((t) => !t.completed || visibleCompleted.has(t.id));
+};
+
+/** @returns {number} count of completed tasks hidden in the all-view */
+export const hiddenCompletedCount = () => {
+  if (state.filter !== 'all' || state.showAllCompleted) return 0;
+  return state.tasks.filter((t) => t.completed).length - COMPLETED_COLLAPSE_MAX;
+};
+
+export const toggleShowAllCompleted = () => {
+  state.showAllCompleted = !state.showAllCompleted;
+  renderTasks();
+};
+
+/** Build a plain-text dump of the tasks currently visible in the active filter. */
+export const visibleTasksAsText = () =>
+  visibleTasks()
+    .map((t) => t.text)
+    .join('\n');
+
+/**
+ * Copy the visible tasks to the clipboard. Falls back to the legacy execCommand
+ * path when navigator.clipboard is unavailable (insecure context, old Safari).
+ * @returns {Promise<boolean>} true on success.
+ */
+export const copyVisibleTasks = async () => {
+  const text = visibleTasksAsText();
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  }
 };
 
 /**
@@ -46,8 +93,11 @@ const placeTaskInOrder = (task) => {
   }
 };
 
-/** @param {string} text */
-export const addTask = (text) => {
+/**
+ * @param {string} text
+ * @param {boolean} [prepend=false] When true, insert at the very top of the list.
+ */
+export const addTask = (text, prepend = false) => {
   const clean = text.trim();
   if (!clean) return;
   const task = {
@@ -56,9 +106,13 @@ export const addTask = (text) => {
     completed: false,
     createdAt: Date.now(),
   };
-  const firstCompletedIdx = state.tasks.findIndex((t) => t.completed);
-  if (firstCompletedIdx === -1) state.tasks.push(task);
-  else state.tasks.splice(firstCompletedIdx, 0, task);
+  if (prepend) {
+    state.tasks.unshift(task);
+  } else {
+    const firstCompletedIdx = state.tasks.findIndex((t) => t.completed);
+    if (firstCompletedIdx === -1) state.tasks.push(task);
+    else state.tasks.splice(firstCompletedIdx, 0, task);
+  }
   state.lastAnimatedIds.add(task.id);
   saveTasks();
   renderTasks();
@@ -180,7 +234,7 @@ const buildTaskEl = (task, index) => {
 
   const text = document.createElement('span');
   text.className = 'task-text';
-  text.textContent = task.text;
+  text.appendChild(renderTextWithLinks(task.text, document));
   text.title = 'Двойной клик — редактировать';
   li.appendChild(text);
 
@@ -207,6 +261,21 @@ export const renderTasks = () => {
   const visible = visibleTasks();
   taskList.innerHTML = '';
   visible.forEach((task, i) => taskList.appendChild(buildTaskEl(task, i)));
+
+  const hidden = hiddenCompletedCount();
+  if (hidden > 0) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'task-show-all';
+    toggle.textContent = `Показать ещё ${hidden} ${pluralize(hidden, ['завершённую', 'завершённые', 'завершённых'])}`;
+    taskList.appendChild(toggle);
+  } else if (state.filter === 'all' && state.showAllCompleted) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'task-show-all';
+    toggle.textContent = 'Скрыть завершённые';
+    taskList.appendChild(toggle);
+  }
 
   if (state.pendingDeleteId) {
     const li = taskList.querySelector(`.task[data-id="${state.pendingDeleteId}"]`);
@@ -317,6 +386,7 @@ export const startTaskEdit = (li) => {
 /** Set the active filter and re-render. @param {TaskFilter} f */
 export const setFilter = (f) => {
   state.filter = f;
+  state.showAllCompleted = false;
   document.querySelectorAll('.filter').forEach((el) => el.classList.remove('is-active'));
   const active = /** @type {HTMLElement | null} */ ($(`[data-filter="${f}"]`));
   if (active) active.classList.add('is-active');

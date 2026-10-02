@@ -1,37 +1,46 @@
 // @ts-check
 /** @typedef {import('./types.js').Timer} Timer */
 /** @typedef {import('./types.js').TimerPhase} TimerPhase */
+/** @typedef {import('./types.js').TimerType} TimerType */
 
 import { state } from './state.js';
 import { saveTimers } from './storage.js';
-import { formatMMSS, generateId, parseMMSS } from './utils.js';
+import { formatMMSS, formatDuration, generateId, parseDuration, parseMMSS } from './utils.js';
 import { showToast, hideToast } from './toast.js';
 import { playBeep } from './audio.js';
 import { fireBrowserNotification } from './notifications.js';
-import { timersCountEl, timersListEl, qs } from './dom.js';
+import { timersCountEl, timersListEl, focusOverlay, qs } from './dom.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 50;
 const RING_RADIUS = 50;
 const PENDING_DELETE_TIMEOUT_MS = 3000;
 const TICK_INTERVAL_MS = 250;
 
-/** @returns {Timer} */
-const createDefaultTimer = () => ({
-  id: generateId('tm'),
-  name: state.timers.length === 0 ? 'Pomodoro' : `Pomodoro ${state.timers.length + 1}`,
-  workDuration: 52 * 60,
-  breakDuration: 17 * 60,
-  phase: 'work',
-  startedAt: Date.now(),
-  paused: false,
-  pausedAt: null,
-  pausedDuration: 0,
-  expired: false,
-});
+/** @param {TimerType} [type='pomodoro'] @returns {Timer} */
+export const createDefaultTimer = (type = 'pomodoro') => {
+  const idx = state.timers.length;
+  const isFirst = idx === 0;
+  const nameBase = type === 'pomodoro' ? 'Pomodoro' : 'Таймер';
+  return {
+    id: generateId('tm'),
+    name: isFirst ? nameBase : `${nameBase} ${idx + 1}`,
+    type,
+    workDuration: type === 'work' ? 8 * 3600 : 52 * 60,
+    breakDuration: 17 * 60,
+    phase: 'work',
+    startedAt: Date.now(),
+    paused: false,
+    pausedAt: null,
+    pausedDuration: 0,
+    expired: false,
+  };
+};
 
 /** @param {Timer} timer */
-const getPhaseDuration = (timer) =>
-  timer.phase === 'work' ? timer.workDuration : timer.breakDuration;
+const getPhaseDuration = (timer) => {
+  if (timer.type === 'work') return timer.workDuration;
+  return timer.phase === 'work' ? timer.workDuration : timer.breakDuration;
+};
 
 /** @param {Timer} timer @returns {number} */
 const getRemainingSeconds = (timer) => {
@@ -47,13 +56,22 @@ const getRemainingSeconds = (timer) => {
 };
 
 /** @param {Timer} timer */
-const updateTimerDisplay = (timer) => {
-  const card = qs(`.timer-card[data-id="${timer.id}"]`, timersListEl);
+const updateTimerDisplay = (timer, root = timersListEl) => {
+  const card = qs(`.timer-card[data-id="${timer.id}"]`, root);
   if (!card) return;
   const remaining = getRemainingSeconds(timer);
   const total = getPhaseDuration(timer);
   const timeEl = qs('.timer-time', card);
-  if (timeEl) timeEl.textContent = formatMMSS(remaining);
+  if (timeEl) {
+    timeEl.textContent = formatMMSS(remaining);
+    timeEl.classList.toggle('has-hours', remaining >= 3600);
+  }
+  card.classList.toggle('is-paused', timer.paused && !timer.expired);
+  card.classList.toggle('is-expired', timer.expired);
+  card.classList.toggle('is-break', timer.phase === 'break');
+  card.classList.toggle('is-work', timer.type === 'work');
+  const phaseEl = qs('.timer-phase', card);
+  if (phaseEl) phaseEl.textContent = timer.phase === 'work' ? 'работа' : 'перерыв';
   const ringProgress = qs('.timer-ring-progress', card);
   if (ringProgress instanceof SVGElement) {
     const progress = timer.expired
@@ -73,6 +91,10 @@ const updateTimerDisplay = (timer) => {
       toggleBtn.title = timer.paused ? 'Запустить' : 'Пауза';
     }
   }
+  // Keep the focus-mode clone in sync with the canonical card.
+  if (root === timersListEl && state.focusedTimerId === timer.id) {
+    updateTimerDisplay(timer, focusOverlay);
+  }
 };
 
 /** @param {Timer} timer */
@@ -80,11 +102,11 @@ const onPhaseEnd = (timer) => {
   playBeep(timer.phase === 'work' ? 'work' : 'break');
   fireBrowserNotification(timer);
   const wasPhase = timer.phase === 'work' ? 'Работа' : 'Перерыв';
-  const nextPhase = timer.phase === 'work' ? 'Перерыв' : 'Работа';
+  const isSinglePhase = timer.type === 'work';
   showToast(
     `${wasPhase} заверш${timer.phase === 'work' ? 'а' : ''}`,
-    () => switchTimerPhase(timer.id),
-    `→ ${nextPhase}`,
+    isSinglePhase ? null : () => switchTimerPhase(timer.id),
+    isSinglePhase ? 'Закрыть' : '→ Перерыв',
   );
   triggerPhaseFlash(timer.id);
   const card = qs(`.timer-card[data-id="${timer.id}"]`, timersListEl);
@@ -100,8 +122,9 @@ const triggerPhaseFlash = (id) => {
   card.classList.add('phase-flash');
 };
 
-export const addTimer = () => {
-  const timer = createDefaultTimer();
+/** @param {TimerType} [type] */
+export const addTimer = (type) => {
+  const timer = createDefaultTimer(type);
   state.timers.push(timer);
   saveTimers();
   renderTimers();
@@ -199,6 +222,8 @@ export const resetTimerPhase = (id) => {
 export const switchTimerPhase = (id) => {
   const timer = state.timers.find((t) => t.id === id);
   if (!timer) return;
+  // Single-phase timers have no break to switch into.
+  if (timer.type === 'work') return;
   hideToast();
   const now = Date.now();
   timer.phase = timer.phase === 'work' ? 'break' : 'work';
@@ -253,12 +278,44 @@ export const renameTimer = (id, newName) => {
 export const setTimerDuration = (id, type, value) => {
   const timer = state.timers.find((t) => t.id === id);
   if (!timer) return false;
-  const parsed = parseInt(String(value), 10);
-  if (isNaN(parsed) || parsed < 1 || parsed > 240) return false;
-  if (type === 'work') timer.workDuration = parsed * 60;
-  else timer.breakDuration = parsed * 60;
+  const totalSeconds = parseDuration(String(value));
+  if (totalSeconds === null) return false;
+  if (type === 'work') timer.workDuration = totalSeconds;
+  else timer.breakDuration = totalSeconds;
   saveTimers();
   return true;
+};
+
+/** @returns {HTMLButtonElement} */
+const buildFocusCloseBtn = () => {
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'focus-close';
+  closeBtn.type = 'button';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', 'Закрыть');
+  return closeBtn;
+};
+
+/** @param {string} id */
+export const enterFocusMode = (id) => {
+  const card = timersListEl.querySelector(`.timer-card[data-id="${id}"]`);
+  if (!(card instanceof HTMLElement)) return;
+  /** @type {HTMLElement} */
+  const clone = /** @type {HTMLElement} */ (card.cloneNode(true));
+  clone.classList.add('is-focus');
+  clone.appendChild(buildFocusCloseBtn());
+  focusOverlay.innerHTML = '';
+  focusOverlay.appendChild(clone);
+  focusOverlay.hidden = false;
+  focusOverlay.setAttribute('aria-hidden', 'false');
+  state.focusedTimerId = id;
+};
+
+export const exitFocusMode = () => {
+  state.focusedTimerId = null;
+  focusOverlay.innerHTML = '';
+  focusOverlay.hidden = true;
+  focusOverlay.setAttribute('aria-hidden', 'true');
 };
 
 /**
@@ -278,9 +335,9 @@ export const startTimerRemainingEdit = (card) => {
   input.type = 'text';
   input.className = 'timer-time-edit';
   input.value = formatMMSS(getRemainingSeconds(timer));
-  input.maxLength = 5;
+  input.maxLength = 8;
   input.spellcheck = false;
-  input.setAttribute('aria-label', 'Оставшееся время (MM:SS)');
+  input.setAttribute('aria-label', 'Оставшееся время (ММ:СС или Ч:ММ:СС)');
 
   timeEl.replaceWith(input);
   input.focus();
@@ -307,7 +364,9 @@ export const startTimerRemainingEdit = (card) => {
     }
     const restored = document.createElement('div');
     restored.className = 'timer-time';
-    restored.textContent = formatMMSS(getRemainingSeconds(timer));
+    const restoredRemaining = getRemainingSeconds(timer);
+    restored.textContent = formatMMSS(restoredRemaining);
+    restored.classList.toggle('has-hours', restoredRemaining >= 3600);
     if (input.parentNode) input.replaceWith(restored);
     // Re-trigger the ring fill animation since elapsed has changed.
     const ringProgress = card.querySelector('.timer-ring-progress');
@@ -329,7 +388,7 @@ export const startTimerRemainingEdit = (card) => {
 /** @param {Timer} timer @returns {HTMLElement} */
 const buildTimerCard = (timer) => {
   const card = document.createElement('div');
-  card.className = `timer-card${timer.phase === 'break' ? ' is-break' : ''}${timer.paused ? ' is-paused' : ''}${timer.expired ? ' is-expired' : ''}`;
+  card.className = `timer-card${timer.phase === 'break' ? ' is-break' : ''}${timer.paused ? ' is-paused' : ''}${timer.expired ? ' is-expired' : ''}${timer.type === 'work' ? ' is-work' : ''}`;
   card.dataset.id = timer.id;
 
   const header = document.createElement('div');
@@ -340,6 +399,14 @@ const buildTimerCard = (timer) => {
   name.textContent = timer.name;
   name.title = 'Двойной клик — переименовать';
   header.appendChild(name);
+
+  const expand = document.createElement('button');
+  expand.className = 'timer-expand';
+  expand.type = 'button';
+  expand.setAttribute('aria-label', 'На весь экран');
+  expand.title = 'На весь экран';
+  expand.textContent = '⛶';
+  header.appendChild(expand);
 
   const del = document.createElement('button');
   del.className = 'timer-delete';
@@ -370,7 +437,9 @@ const buildTimerCard = (timer) => {
 
   const timeEl = document.createElement('div');
   timeEl.className = 'timer-time';
-  timeEl.textContent = formatMMSS(getPhaseDuration(timer));
+  const initialRemaining = getPhaseDuration(timer);
+  timeEl.textContent = formatMMSS(initialRemaining);
+  timeEl.classList.toggle('has-hours', initialRemaining >= 3600);
   timeWrap.appendChild(timeEl);
 
   const phase = document.createElement('div');
@@ -392,19 +461,51 @@ const buildTimerCard = (timer) => {
   workDur.className = 'timer-dur';
   workDur.type = 'button';
   workDur.dataset.field = 'work';
-  workDur.textContent = `${timer.workDuration / 60} мин работа`;
+  workDur.textContent = `${formatDuration(timer.workDuration)} работа`;
   workDur.title = 'Клик — изменить длительность работы';
   durations.appendChild(workDur);
 
-  const breakDur = document.createElement('button');
-  breakDur.className = 'timer-dur';
-  breakDur.type = 'button';
-  breakDur.dataset.field = 'break';
-  breakDur.textContent = `${timer.breakDuration / 60} мин перерыв`;
-  breakDur.title = 'Клик — изменить длительность перерыва';
-  durations.appendChild(breakDur);
+  if (timer.type === 'pomodoro') {
+    const breakDur = document.createElement('button');
+    breakDur.className = 'timer-dur';
+    breakDur.type = 'button';
+    breakDur.dataset.field = 'break';
+    breakDur.textContent = `${formatDuration(timer.breakDuration)} перерыв`;
+    breakDur.title = 'Клик — изменить длительность перерыва';
+    durations.appendChild(breakDur);
+  }
 
   card.appendChild(durations);
+
+  let phaseToggle = null;
+  if (timer.type === 'pomodoro') {
+    phaseToggle = document.createElement('div');
+    phaseToggle.className = 'timer-phase-toggle';
+    phaseToggle.setAttribute('role', 'tablist');
+    phaseToggle.setAttribute('aria-label', 'Фаза таймера');
+
+    /**
+     * @param {'work' | 'break'} target
+     * @param {string} label
+     */
+    const buildPhaseOption = (target, label) => {
+      const opt = document.createElement('button');
+      opt.className = `timer-phase-option${timer.phase === target ? ' is-active' : ''}`;
+      opt.type = 'button';
+      opt.dataset.target = target;
+      opt.setAttribute('role', 'tab');
+      opt.setAttribute('aria-selected', String(timer.phase === target));
+      const text = document.createElement('span');
+      text.className = 'timer-phase-option-label';
+      text.textContent = label;
+      opt.append(text);
+      return opt;
+    };
+
+    phaseToggle.appendChild(buildPhaseOption('work', 'работа'));
+    phaseToggle.appendChild(buildPhaseOption('break', 'перерыв'));
+    card.appendChild(phaseToggle);
+  }
 
   const controls = document.createElement('div');
   controls.className = 'timer-controls';
@@ -428,42 +529,6 @@ const buildTimerCard = (timer) => {
   }
   controls.appendChild(toggleBtn);
 
-  const phaseToggle = document.createElement('div');
-  phaseToggle.className = 'timer-phase-toggle';
-  phaseToggle.setAttribute('role', 'tablist');
-  phaseToggle.setAttribute('aria-label', 'Фаза таймера');
-
-  /**
-   * @param {'work' | 'break'} target
-   * @param {string} label
-   * @param {string} icon
-   */
-  const buildPhaseOption = (target, label, icon) => {
-    const opt = document.createElement('button');
-    opt.className = `timer-phase-option${timer.phase === target ? ' is-active' : ''}`;
-    opt.type = 'button';
-    opt.dataset.target = target;
-    opt.setAttribute('role', 'tab');
-    opt.setAttribute('aria-selected', String(timer.phase === target));
-    const text = document.createElement('span');
-    text.className = 'timer-phase-option-label';
-    text.textContent = label;
-    const iconWrap = document.createElement('span');
-    iconWrap.className = 'timer-phase-option-icon';
-    iconWrap.setAttribute('aria-hidden', 'true');
-    iconWrap.innerHTML = icon;
-    opt.append(iconWrap, text);
-    return opt;
-  };
-
-  // Small line-art icons rendered at a fixed box size so layout never shifts.
-  const ICON_WORK = `<svg viewBox="0 0 12 12" fill="none" stroke="currentcolor" stroke-width="1.25"><circle cx="6" cy="6" r="4.25"/><circle cx="6" cy="6" r="1.4" fill="currentcolor" stroke="none"/></svg>`;
-  const ICON_BREAK = `<svg viewBox="0 0 12 12" fill="none" stroke="currentcolor" stroke-width="1.25" stroke-linecap="round"><path d="M3 5.5 a3 3 0 1 0 3 3"/><path d="M9.5 3.5 v3 h-3"/></svg>`;
-
-  phaseToggle.appendChild(buildPhaseOption('work', 'работа', ICON_WORK));
-  phaseToggle.appendChild(buildPhaseOption('break', 'перерыв', ICON_BREAK));
-  controls.appendChild(phaseToggle);
-
   card.appendChild(controls);
 
   return card;
@@ -479,6 +544,18 @@ export const renderTimers = () => {
   timersListEl.innerHTML = '';
   state.timers.forEach((timer) => timersListEl.appendChild(buildTimerCard(timer)));
   timersCountEl.textContent = String(state.timers.length);
+
+  // Keep the focus-mode clone in sync with the canonical card.
+  if (state.focusedTimerId) {
+    const focusedCard = focusOverlay.querySelector('.timer-card');
+    const sourceCard = timersListEl.querySelector(`.timer-card[data-id="${state.focusedTimerId}"]`);
+    if (focusedCard && sourceCard) {
+      const fresh = /** @type {HTMLElement} */ (sourceCard.cloneNode(true));
+      fresh.classList.add('is-focus');
+      fresh.appendChild(buildFocusCloseBtn());
+      focusedCard.replaceWith(fresh);
+    }
+  }
 
   if (state.pendingTimerDeleteId) {
     const card = timersListEl.querySelector(`.timer-card[data-id="${state.pendingTimerDeleteId}"]`);
@@ -517,6 +594,12 @@ export const tick = () => {
     }
   });
 
+  // Drop the focus overlay if its timer was deleted; live updates are mirrored
+  // by updateTimerDisplay itself.
+  if (state.focusedTimerId && !state.timers.some((t) => t.id === state.focusedTimerId)) {
+    exitFocusMode();
+  }
+
   document.title =
     urgentRemaining !== null ? `${formatMMSS(urgentRemaining)} · Сегодня` : 'Сегодня — список дел';
 };
@@ -538,7 +621,7 @@ export const tickOnBoot = () => {
   }
   saveTimers();
   renderTimers();
-  state.timers.forEach(updateTimerDisplay);
+  state.timers.forEach((t) => updateTimerDisplay(t));
 };
 
 export const startTick = () => {
@@ -608,12 +691,11 @@ export const startTimerDurationEdit = (li, field, btn) => {
   const current = (field === 'work' ? timer.workDuration : timer.breakDuration) / 60;
 
   const input = document.createElement('input');
-  input.type = 'number';
+  input.type = 'text';
   input.className = 'timer-dur-edit';
-  input.value = String(current);
-  input.min = '1';
-  input.max = '240';
-  input.step = '1';
+  input.value = String(Math.round(current));
+  input.placeholder = 'минуты или Ч:ММ';
+  input.setAttribute('inputmode', 'numeric');
 
   btn.replaceWith(input);
   input.focus();
@@ -625,7 +707,7 @@ export const startTimerDurationEdit = (li, field, btn) => {
     restored.className = 'timer-dur';
     restored.type = 'button';
     restored.dataset.field = field;
-    restored.textContent = `${(field === 'work' ? timer.workDuration : timer.breakDuration) / 60} мин ${field === 'work' ? 'работа' : 'перерыв'}`;
+    restored.textContent = `${formatDuration(field === 'work' ? timer.workDuration : timer.breakDuration)} ${field === 'work' ? 'работа' : 'перерыв'}`;
     restored.title = 'Клик — изменить';
     if (input.parentNode) input.replaceWith(restored);
   };

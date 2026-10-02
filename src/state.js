@@ -26,6 +26,8 @@ import { loadTasks, loadTimers, loadNotes } from './storage.js';
  *   audioCtx: AudioContext | null,
  *   lastAnimatedIds: Set<string>,
  *   lastAnimatedNoteIds: Set<string>,
+ *   showAllCompleted: boolean,
+ *   focusedTimerId: string | null,
  *   dragId: string | null,
  * }}
  */
@@ -45,5 +47,7 @@ export const state = {
   audioCtx: null,
   lastAnimatedIds: new Set(),
   lastAnimatedNoteIds: new Set(),
+  showAllCompleted: false,
+  focusedTimerId: null,
   dragId: null,
 };

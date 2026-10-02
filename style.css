@@ -39,9 +39,36 @@ body {
   line-height: 1.5;
 }
 
+html {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
 body {
   background:
     radial-gradient(1200px 600px at 50% -10%, rgba(157, 186, 133, 0.04), transparent 60%), var(--bg);
+}
+
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+body::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+
+body::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-mute);
 }
 
 button {
@@ -397,12 +424,33 @@ input {
     text-decoration-color 160ms ease;
   text-decoration: line-through;
   text-decoration-color: transparent;
-  text-decoration-thickness: 1.5px;
+  text-decoration-thickness: 1px;
+  text-decoration-skip-ink: none;
 }
 
 .task.is-done .task-text {
   color: var(--text-mute);
-  text-decoration-color: var(--text-mute);
+  text-decoration-color: rgba(157, 186, 133, 0.45);
+}
+
+.task-text .task-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(157, 186, 133, 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: color 140ms ease;
+  word-break: break-all;
+}
+
+.task-text .task-link:hover {
+  color: var(--text);
+  text-decoration-color: var(--accent);
+}
+
+.task.is-done .task-text .task-link {
+  color: var(--text-mute);
+  text-decoration-color: rgba(124, 124, 135, 0.4);
 }
 
 .task-id {
@@ -442,6 +490,31 @@ input {
 
 .task-edit:focus {
   border-color: var(--accent);
+}
+
+.task-show-all {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-mute);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  text-align: center;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.task-show-all:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: rgba(157, 186, 133, 0.3);
 }
 
 /* Delete */
@@ -571,6 +644,24 @@ input {
 .clear:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-soft);
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.copy:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .clear-count {
@@ -782,6 +873,33 @@ input {
   flex-shrink: 0;
 }
 
+.timer-expand {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-mute);
+  opacity: 0;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.timer-card:hover .timer-expand {
+  opacity: 1;
+}
+
+.timer-expand:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .timer-card:hover .timer-delete {
   opacity: 1;
 }
@@ -925,6 +1043,12 @@ input {
   line-height: 1;
 }
 
+.timer-time.has-hours {
+  font-size: 22px;
+}
+
+/* H:MM:SS strings are two characters wider than MM:SS — keep them inside the ring. */
+
 .timer-phase {
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -978,7 +1102,10 @@ input {
 /* Durations */
 .timer-durations {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+
+  /* One column per duration button: two for a Pomodoro, one full-width row
+     for a single-phase timer. */
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
@@ -1125,10 +1252,10 @@ input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  padding: 2px;
+  padding: 3px;
   background: var(--bg-input);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   height: 36px;
   margin-top: 2px;
 }
@@ -1137,61 +1264,29 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
-  letter-spacing: -0.005em;
   color: var(--text-mute);
-  border-radius: 7px;
+  border-radius: 5px;
   height: 100%;
-  width: 100%;
   padding: 0 10px;
   transition:
     color 140ms ease,
     background 140ms ease;
 }
 
-.timer-phase-option-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-  color: currentcolor;
-}
-
-.timer-phase-option-icon svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.timer-phase-option-label {
-  line-height: 1;
-}
-
 .timer-phase-option:hover:not(.is-active) {
   color: var(--text-soft);
-  background: rgba(255, 255, 255, 0.025);
 }
 
 .timer-phase-option.is-active {
-  background: var(--bg);
+  background: var(--bg-elev);
   color: var(--accent);
 }
 
 .timer-card.is-break .timer-phase-option.is-active {
   color: var(--break);
-}
-
-.timer-card.is-expired .timer-phase-toggle {
-  border-color: var(--accent);
-}
-
-.timer-card.is-break.is-expired .timer-phase-toggle {
-  border-color: var(--break);
 }
 
 /* ── Notes panel (right column) ───────────────────────────── */
@@ -1319,6 +1414,101 @@ input {
   border-top: 1px dashed var(--border);
 }
 
+.note-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 8px;
+}
+
+.note-links[hidden] {
+  display: none;
+}
+
+.note-links-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-right: 2px;
+}
+
+.note-links-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.note-links .task-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(157, 186, 133, 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
+.note-links .task-link:hover {
+  color: var(--text);
+  text-decoration-color: var(--accent);
+}
+
+/* Note focus-overlay */
+.note-focus {
+  align-items: stretch;
+  justify-content: center;
+}
+
+.note-focus-wrap {
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 48px 40px 36px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  position: relative;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.note-focus-wrap .focus-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.note-focus-body {
+  flex: 1;
+  min-height: 320px;
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  resize: none;
+  outline: none;
+}
+
+.note-focus-body:focus {
+  border-color: var(--accent);
+}
+
+.note-focus-wrap .note-links {
+  font-size: 14px;
+  margin-top: 0;
+}
+
 .note-delete {
   color: var(--text-mute);
   font-family: var(--font-mono);
@@ -1334,6 +1524,39 @@ input {
 .note-delete:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.note-expand {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-mute);
+  opacity: 0;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.note:hover .note-expand {
+  opacity: 1;
+}
+
+.note-expand:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.note-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .note.is-confirming {
@@ -1396,6 +1619,112 @@ input {
   line-height: 1;
 }
 
+/* ── Focus overlay (full-screen timer) ───────────────────── */
+
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(
+    900px 700px at 50% 50%,
+    rgba(11, 11, 13, 0.92),
+    rgba(11, 11, 13, 0.99)
+  );
+  backdrop-filter: blur(12px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.focus-overlay[hidden] {
+  display: none;
+}
+
+.focus-overlay .timer-card.is-focus {
+  width: min(520px, 92vw);
+  padding: 32px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: var(--bg-elev);
+  border-color: var(--border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+.focus-overlay .timer-card.is-focus .timer-header {
+  width: 100%;
+}
+
+.focus-overlay .timer-card.is-focus .timer-name {
+  text-align: center;
+}
+
+/* The card's own header buttons are redundant under focus mode: the overlay
+   has its own close button, and expanding an expanded card is a no-op. */
+.focus-overlay .timer-card.is-focus .timer-expand,
+.focus-overlay .timer-card.is-focus .timer-delete {
+  display: none;
+}
+
+.focus-overlay .timer-card.is-focus .timer-display {
+  width: 280px;
+  height: 280px;
+}
+
+.focus-overlay .timer-card.is-focus .timer-ring-wrap {
+  width: 280px;
+  height: 280px;
+}
+
+.focus-overlay .timer-card.is-focus .timer-time-wrap {
+  pointer-events: none;
+}
+
+.focus-overlay .timer-card.is-focus .timer-time {
+  font-size: 52px;
+}
+
+.focus-overlay .timer-card.is-focus .timer-time.has-hours {
+  font-size: 42px;
+}
+
+.focus-overlay .timer-card.is-focus .timer-phase {
+  font-size: 13px;
+}
+
+.focus-overlay .timer-card.is-focus .timer-durations,
+.focus-overlay .timer-card.is-focus .timer-controls,
+.focus-overlay .timer-card.is-focus .timer-phase-toggle {
+  width: 100%;
+  max-width: 360px;
+}
+
+.focus-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--text-mute);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.focus-close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
 /* ── Toast ────────────────────────────────────────────────── */
 
 .toast {
@@ -1415,6 +1744,10 @@ input {
   z-index: 100;
   transform: translateX(-50%);
   animation: toast-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.toast[hidden] {
+  display: none;
 }
 
 .toast.hiding {

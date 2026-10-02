@@ -4,10 +4,52 @@
 import { state } from './state.js';
 import { saveNotes } from './storage.js';
 import { generateId } from './utils.js';
-import { notesListEl, notesCountEl, addNoteBtn } from './dom.js';
+import { notesListEl, notesCountEl, addNoteBtn, noteFocusOverlay } from './dom.js';
 
 const SAVE_DEBOUNCE_MS = 250;
 const PENDING_DELETE_TIMEOUT_MS = 3000;
+
+// A loose URL extractor used to show a preview row under each note.
+const NOTE_URL_RE = /\b((?:https?:\/\/)?(?:[\w-]+\.[\w-]{2,})[^\s<]*)/gi;
+
+/** @param {string} text @returns {string[]} */
+const extractLinks = (text) => {
+  const out = /** @type {string[]} */ ([]);
+  for (const m of text.matchAll(NOTE_URL_RE)) out.push(m[1]);
+  return out;
+};
+
+/**
+ * Fill a note's link row with the URLs found in its body. Hides the row when
+ * there are none.
+ * @param {HTMLElement} container
+ * @param {string} text
+ */
+const fillLinks = (container, text) => {
+  container.innerHTML = '';
+  const found = extractLinks(text);
+  if (found.length === 0) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+  const label = document.createElement('span');
+  label.className = 'note-links-label';
+  label.textContent = 'ссылки';
+  container.appendChild(label);
+  const list = document.createElement('span');
+  list.className = 'note-links-list';
+  for (const raw of found) {
+    const a = document.createElement('a');
+    a.href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    a.textContent = raw;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'task-link';
+    list.appendChild(a);
+  }
+  container.appendChild(list);
+};
 
 /** @returns {Note} */
 const createNote = () => ({
@@ -52,6 +94,21 @@ const buildNoteCard = (note) => {
   ta.setAttribute('aria-label', 'Текст заметки');
   card.appendChild(ta);
 
+  const links = document.createElement('div');
+  links.className = 'note-links';
+  links.hidden = true;
+  card.appendChild(links);
+
+  const refreshLinks = () => fillLinks(links, note.body);
+  refreshLinks();
+
+  const expand = document.createElement('button');
+  expand.className = 'note-expand';
+  expand.type = 'button';
+  expand.setAttribute('aria-label', 'Развернуть заметку');
+  expand.title = 'Развернуть';
+  expand.textContent = '⛶';
+
   const meta = document.createElement('div');
   meta.className = 'note-meta';
 
@@ -59,14 +116,21 @@ const buildNoteCard = (note) => {
   stamp.className = 'note-stamp';
   stamp.textContent = formatStamp(note.updatedAt || note.createdAt);
 
+  const actions = document.createElement('span');
+  actions.className = 'note-actions';
+  actions.append(expand);
   const del = document.createElement('button');
   del.className = 'note-delete';
   del.type = 'button';
   del.textContent = 'удалить';
   del.setAttribute('aria-label', 'Удалить заметку');
-
-  meta.append(stamp, del);
+  actions.append(del);
+  meta.append(stamp, actions);
   card.appendChild(meta);
+
+  expand.addEventListener('click', () => {
+    enterNoteFocus(/** @type {string} */ (note.id));
+  });
 
   // Debounced save while typing.
   /** @type {ReturnType<typeof setTimeout> | null} */
@@ -74,6 +138,7 @@ const buildNoteCard = (note) => {
   ta.addEventListener('input', () => {
     note.body = ta.value;
     note.updatedAt = Date.now();
+    refreshLinks();
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveNotes();
@@ -205,4 +270,71 @@ export const cancelPendingNoteDelete = () => {
 /** Wire the "+" button to add a note. */
 export const wireAddNoteButton = () => {
   addNoteBtn.addEventListener('click', addNote);
+};
+
+/** Open the note focus-overlay with a large editor and linkified preview. @param {string} id */
+const enterNoteFocus = (id) => {
+  const note = state.notes.find((n) => n.id === id);
+  if (!note) return;
+  noteFocusOverlay.innerHTML = '';
+  noteFocusOverlay.hidden = false;
+  noteFocusOverlay.setAttribute('aria-hidden', 'false');
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'focus-close';
+  close.textContent = '×';
+  close.setAttribute('aria-label', 'Закрыть');
+  noteFocusOverlay.appendChild(close);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'note-focus-wrap';
+  noteFocusOverlay.appendChild(wrap);
+
+  const ta = document.createElement('textarea');
+  ta.className = 'note-focus-body';
+  ta.value = note.body;
+  ta.spellcheck = false;
+  ta.setAttribute('aria-label', 'Текст заметки');
+  wrap.appendChild(ta);
+
+  const links = document.createElement('div');
+  links.className = 'note-links';
+  wrap.appendChild(links);
+
+  const refreshLinks = () => fillLinks(links, note.body);
+  refreshLinks();
+
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let saveTimer = null;
+  ta.addEventListener('input', () => {
+    note.body = ta.value;
+    note.updatedAt = Date.now();
+    refreshLinks();
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveNotes();
+      saveTimer = null;
+    }, SAVE_DEBOUNCE_MS);
+  });
+
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+};
+
+export const exitNoteFocus = () => {
+  noteFocusOverlay.hidden = true;
+  noteFocusOverlay.setAttribute('aria-hidden', 'true');
+  noteFocusOverlay.innerHTML = '';
+  // Re-render so any changes are reflected in the card preview.
+  renderNotes();
+};
+
+/** Wire close-on-Esc and backdrop click for the note focus-overlay. */
+export const wireNoteFocus = () => {
+  noteFocusOverlay.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (t.closest('.focus-close') || t === noteFocusOverlay) exitNoteFocus();
+  });
 };

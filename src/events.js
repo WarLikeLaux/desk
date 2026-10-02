@@ -18,7 +18,11 @@ import {
   clearCompleted,
   startTaskEdit,
   setFilter,
+  toggleShowAllCompleted,
+  copyVisibleTasks,
 } from './tasks.js';
+import { copyBtn, focusOverlay, noteFocusOverlay } from './dom.js';
+import { showToast } from './toast.js';
 import {
   toggleTimerPaused,
   resetTimerPhase,
@@ -29,8 +33,10 @@ import {
   startTimerDurationEdit,
   startTimerRemainingEdit,
   renderTimers,
+  enterFocusMode,
+  exitFocusMode,
 } from './timers.js';
-import { cancelPendingNoteDelete } from './notes.js';
+import { cancelPendingNoteDelete, exitNoteFocus, wireNoteFocus } from './notes.js';
 import { hideToast } from './toast.js';
 import { setupDragDrop } from './dragdrop.js';
 import { setupAudioUnlock } from './audio.js';
@@ -50,6 +56,14 @@ const wireComposer = () => {
       e.preventDefault();
       taskInput.value = '';
       taskInput.blur();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter prepends the new task to the top of the list.
+      e.preventDefault();
+      if (taskInput.value.trim()) {
+        addTask(taskInput.value, true);
+        taskInput.value = '';
+        taskInput.focus();
+      }
     }
   });
 };
@@ -64,6 +78,12 @@ const wireTaskList = () => {
     if (!id) return;
     if (target.closest('.check')) toggleTask(id);
     else if (target.closest('.delete')) requestDeleteTask(li, id);
+  });
+
+  taskList.addEventListener('click', (e) => {
+    if (e.target instanceof Element && e.target.closest('.task-show-all')) {
+      toggleShowAllCompleted();
+    }
   });
 
   taskList.addEventListener('dblclick', (e) => {
@@ -89,6 +109,13 @@ const wireFilters = () => {
 
 const wireClearCompleted = () => {
   clearBtn.addEventListener('click', clearCompleted);
+};
+
+const wireCopyTasks = () => {
+  copyBtn.addEventListener('click', async () => {
+    const ok = await copyVisibleTasks();
+    if (ok) showToast('Задачи скопированы', null, 'Закрыть');
+  });
 };
 
 const wireOutsideClicks = () => {
@@ -138,11 +165,14 @@ const wireGlobalKeys = () => {
 };
 
 const wireTimers = () => {
-  addTimerBtn.addEventListener('click', () => {
-    import('./timers.js').then((m) => m.addTimer());
+  addTimerBtn.addEventListener('click', (e) => {
+    const t = e.shiftKey ? 'work' : 'pomodoro';
+    import('./timers.js').then((m) => m.addTimer(t));
   });
 
-  timersListEl.addEventListener('click', (e) => {
+  // Shared by the timers list and the focus-mode overlay, whose card is a clone.
+  /** @param {MouseEvent} e */
+  const onTimerCardClick = (e) => {
     const target = e.target;
     if (!(target instanceof Element)) return;
     const card = target.closest('.timer-card');
@@ -159,6 +189,7 @@ const wireTimers = () => {
         if (timer && timer.phase !== target) switchTimerPhase(id);
       }
     } else if (target.closest('.timer-delete')) requestDeleteTimer(id);
+    else if (target.closest('.timer-expand')) enterFocusMode(id);
     else if (target.closest('.timer-time')) {
       if (card.classList.contains('is-paused') && !card.classList.contains('is-expired')) {
         startTimerRemainingEdit(card);
@@ -171,15 +202,19 @@ const wireTimers = () => {
         startTimerDurationEdit(card, field, btn);
       }
     }
-  });
+  };
 
-  timersListEl.addEventListener('dblclick', (e) => {
+  /** @param {MouseEvent} e */
+  const onTimerCardDblClick = (e) => {
     const target = e.target;
     if (!(target instanceof Element)) return;
     if (!target.closest('.timer-name')) return;
     const card = target.closest('.timer-card');
     if (card instanceof HTMLElement) startTimerNameEdit(card);
-  });
+  };
+
+  timersListEl.addEventListener('click', onTimerCardClick);
+  timersListEl.addEventListener('dblclick', onTimerCardDblClick);
 
   // Notification click → switch phase
   window.addEventListener('desk:phase-switch', (e) => {
@@ -187,9 +222,23 @@ const wireTimers = () => {
     if (detail && typeof detail.id === 'string') switchTimerPhase(detail.id);
   });
 
-  // Hide toast on Esc
+  // Focus overlay: close on backdrop click, Esc, or × button; otherwise the
+  // clone's controls behave exactly like the canonical card.
+  focusOverlay.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    if (t.closest('.focus-close') || t === focusOverlay) exitFocusMode();
+    else onTimerCardClick(e);
+  });
+  focusOverlay.addEventListener('dblclick', onTimerCardDblClick);
+
+  // Hide toast and close focus overlay on Esc
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideToast(true);
+    if (e.key === 'Escape') {
+      if (state.focusedTimerId) exitFocusMode();
+      else if (!noteFocusOverlay.hidden) exitNoteFocus();
+      else hideToast(true);
+    }
   });
 
   // Re-render on storage changes from another tab
@@ -201,9 +250,11 @@ export const setupEventListeners = () => {
   wireTaskList();
   wireFilters();
   wireClearCompleted();
+  wireCopyTasks();
   wireOutsideClicks();
   wireGlobalKeys();
   wireTimers();
+  wireNoteFocus();
   setupDragDrop();
   setupAudioUnlock();
 };

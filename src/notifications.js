@@ -26,12 +26,13 @@ export const fireBrowserNotification = (timer) => {
   if (!('Notification' in window)) return null;
   if (Notification.permission !== 'granted') return null;
   const wasPhase = timer.phase === 'work' ? 'работа' : 'перерыв';
+  const isSinglePhase = timer.type === 'work';
   const nextPhase = timer.phase === 'work' ? 'перерыв' : 'работа';
   try {
     const n = new Notification(
       `${wasPhase.charAt(0).toUpperCase() + wasPhase.slice(1)} завершена`,
       {
-        body: `Переключиться на ${nextPhase}?`,
+        body: isSinglePhase ? 'Время вышло.' : `Переключиться на ${nextPhase}?`,
         tag: `pomodoro-${timer.id}`,
         silent: false,
       },
@@ -43,6 +44,7 @@ export const fireBrowserNotification = (timer) => {
       try {
         window.focus();
       } catch {}
+      if (isSinglePhase) return;
       // The click handler dispatches a custom event that timers.js listens for.
       window.dispatchEvent(new CustomEvent('desk:phase-switch', { detail: { id: timer.id } }));
     };

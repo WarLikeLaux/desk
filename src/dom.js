@@ -28,3 +28,6 @@ export const timersCountEl = /** @type {HTMLElement} */ ($('#timersCount'));
 export const addTimerBtn = /** @type {HTMLButtonElement} */ ($('#addTimer'));
 export const emptyTitle = /** @type {HTMLElement} */ ($('#emptyTitle'));
 export const emptyHint = /** @type {HTMLElement} */ ($('#emptyHint'));
+export const notesListEl = /** @type {HTMLElement} */ ($('#notesList'));
+export const notesCountEl = /** @type {HTMLElement} */ ($('#notesCount'));
+export const addNoteBtn = /** @type {HTMLButtonElement} */ ($('#addNote'));

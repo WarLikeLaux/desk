@@ -63,11 +63,12 @@ xdg-open "$HOME/code/desk/index.html"
 Требует Node.js ≥ 20 для тулов. Сам сайт не требует сборки и не имеет рантайм-зависимостей — `src/` грузится браузером напрямую через нативные ES-модули.
 
 ```bash
-npm ci                # установка dev-тулов (eslint, prettier, stylelint, typescript)
+npm ci                # установка dev-тулов (eslint, prettier, stylelint, typescript, impeccable)
 npm run format        # автоформат JS, CSS, JSON, MD
 npm run lint          # ESLint на src/
 npm run lint:css      # Stylelint на *.css
 npm run typecheck     # tsc --noEmit по JS с JSDoc-типизацией
+npm run design        # Impeccable detector на index.html и style.css (WCAG, шрифты, AI-slop)
 npm run ci            # всё вышеперечисленное (это гоняет CI)
 ```
 

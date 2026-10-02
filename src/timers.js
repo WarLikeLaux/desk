@@ -4,7 +4,7 @@
 
 import { state } from './state.js';
 import { saveTimers } from './storage.js';
-import { formatMMSS, generateId } from './utils.js';
+import { formatMMSS, generateId, parseMMSS } from './utils.js';
 import { showToast, hideToast } from './toast.js';
 import { playBeep } from './audio.js';
 import { fireBrowserNotification } from './notifications.js';
@@ -180,14 +180,18 @@ export const toggleTimerPaused = (id) => {
 export const resetTimerPhase = (id) => {
   const timer = state.timers.find((t) => t.id === id);
   if (!timer) return;
-  timer.startedAt = Date.now();
+  const now = Date.now();
+  timer.startedAt = now;
   timer.pausedDuration = 0;
-  timer.paused = false;
-  timer.pausedAt = null;
+  timer.paused = true;
+  timer.pausedAt = now;
   timer.expired = false;
   saveTimers();
   const card = qs(`.timer-card[data-id="${id}"]`, timersListEl);
-  if (card) card.classList.remove('is-expired', 'is-paused');
+  if (card) {
+    card.classList.remove('is-expired');
+    card.classList.add('is-paused');
+  }
   updateTimerDisplay(timer);
 };
 
@@ -196,25 +200,35 @@ export const switchTimerPhase = (id) => {
   const timer = state.timers.find((t) => t.id === id);
   if (!timer) return;
   hideToast();
+  const now = Date.now();
   timer.phase = timer.phase === 'work' ? 'break' : 'work';
-  timer.startedAt = Date.now();
+  timer.startedAt = now;
   timer.pausedDuration = 0;
-  timer.paused = false;
-  timer.pausedAt = null;
+  timer.paused = true;
+  timer.pausedAt = now;
   timer.expired = false;
   saveTimers();
   const card = qs(`.timer-card[data-id="${id}"]`, timersListEl);
   if (card) {
     card.classList.toggle('is-break', timer.phase === 'break');
-    card.classList.remove('is-expired', 'is-paused');
+    card.classList.remove('is-expired');
+    card.classList.add('is-paused');
     const phaseEl = qs('.timer-phase', card);
     if (phaseEl) phaseEl.textContent = timer.phase === 'work' ? 'работа' : 'перерыв';
-    const phaseBtn = qs('.timer-phase-btn', card);
-    if (phaseBtn) phaseBtn.textContent = timer.phase === 'work' ? '→ перерыв' : '→ работа';
+    const phaseToggle = qs('.timer-phase-toggle', card);
+    if (phaseToggle) {
+      phaseToggle.querySelectorAll('.timer-phase-option').forEach((opt) => {
+        if (!(opt instanceof HTMLElement)) return;
+        const target = opt.dataset.target;
+        const active = target === timer.phase;
+        opt.classList.toggle('is-active', active);
+        opt.setAttribute('aria-selected', String(active));
+      });
+    }
     const toggleBtn = qs('.timer-toggle', card);
     if (toggleBtn) {
-      toggleBtn.textContent = '⏸';
-      toggleBtn.title = 'Пауза';
+      toggleBtn.textContent = '▶';
+      toggleBtn.title = 'Запустить';
     }
   }
   updateTimerDisplay(timer);
@@ -245,6 +259,71 @@ export const setTimerDuration = (id, type, value) => {
   else timer.breakDuration = parsed * 60;
   saveTimers();
   return true;
+};
+
+/**
+ * Replace the displayed remaining time with an inline editor for a paused timer.
+ * On commit we shift `startedAt` so that `getRemainingSeconds` returns the new value.
+ * @param {HTMLElement} card
+ */
+export const startTimerRemainingEdit = (card) => {
+  const id = card.dataset.id;
+  const timer = state.timers.find((t) => t.id === id);
+  if (!timer || !id || !timer.paused || timer.expired) return;
+  if (card.querySelector('.timer-time-edit')) return;
+  const timeEl = card.querySelector('.timer-time');
+  if (!(timeEl instanceof HTMLElement)) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'timer-time-edit';
+  input.value = formatMMSS(getRemainingSeconds(timer));
+  input.maxLength = 5;
+  input.spellcheck = false;
+  input.setAttribute('aria-label', 'Оставшееся время (MM:SS)');
+
+  timeEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  /** @param {boolean} save */
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save) {
+      const parsed = parseMMSS(input.value);
+      if (parsed !== null && parsed >= 0) {
+        const total = getPhaseDuration(timer);
+        const newRemaining = Math.min(parsed, total);
+        const elapsedMs = (total - newRemaining) * 1000;
+        const refPausedAt = timer.pausedAt ?? Date.now();
+        // Keep `pausedAt` anchored to "now-ish" and shift `startedAt` so the elapsed
+        // portion equals `(total - newRemaining)`. This lets the ring redraw
+        // immediately and survives a reload.
+        timer.startedAt = refPausedAt - timer.pausedDuration - elapsedMs;
+        saveTimers();
+      }
+    }
+    const restored = document.createElement('div');
+    restored.className = 'timer-time';
+    restored.textContent = formatMMSS(getRemainingSeconds(timer));
+    if (input.parentNode) input.replaceWith(restored);
+    // Re-trigger the ring fill animation since elapsed has changed.
+    const ringProgress = card.querySelector('.timer-ring-progress');
+    if (ringProgress instanceof SVGElement) updateTimerDisplay(timer);
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
 };
 
 /** @param {Timer} timer @returns {HTMLElement} */
@@ -349,12 +428,41 @@ const buildTimerCard = (timer) => {
   }
   controls.appendChild(toggleBtn);
 
-  const phaseBtn = document.createElement('button');
-  phaseBtn.className = 'timer-phase-btn';
-  phaseBtn.type = 'button';
-  phaseBtn.textContent = timer.phase === 'work' ? '→ перерыв' : '→ работа';
-  phaseBtn.title = 'Переключить фазу';
-  controls.appendChild(phaseBtn);
+  const phaseToggle = document.createElement('div');
+  phaseToggle.className = 'timer-phase-toggle';
+  phaseToggle.setAttribute('role', 'tablist');
+  phaseToggle.setAttribute('aria-label', 'Фаза таймера');
+
+  /**
+   * @param {'work' | 'break'} target
+   * @param {string} label
+   * @param {string} icon
+   */
+  const buildPhaseOption = (target, label, icon) => {
+    const opt = document.createElement('button');
+    opt.className = `timer-phase-option${timer.phase === target ? ' is-active' : ''}`;
+    opt.type = 'button';
+    opt.dataset.target = target;
+    opt.setAttribute('role', 'tab');
+    opt.setAttribute('aria-selected', String(timer.phase === target));
+    const text = document.createElement('span');
+    text.className = 'timer-phase-option-label';
+    text.textContent = label;
+    const iconWrap = document.createElement('span');
+    iconWrap.className = 'timer-phase-option-icon';
+    iconWrap.setAttribute('aria-hidden', 'true');
+    iconWrap.innerHTML = icon;
+    opt.append(iconWrap, text);
+    return opt;
+  };
+
+  // Small line-art icons rendered at a fixed box size so layout never shifts.
+  const ICON_WORK = `<svg viewBox="0 0 12 12" fill="none" stroke="currentcolor" stroke-width="1.25"><circle cx="6" cy="6" r="4.25"/><circle cx="6" cy="6" r="1.4" fill="currentcolor" stroke="none"/></svg>`;
+  const ICON_BREAK = `<svg viewBox="0 0 12 12" fill="none" stroke="currentcolor" stroke-width="1.25" stroke-linecap="round"><path d="M3 5.5 a3 3 0 1 0 3 3"/><path d="M9.5 3.5 v3 h-3"/></svg>`;
+
+  phaseToggle.appendChild(buildPhaseOption('work', 'работа', ICON_WORK));
+  phaseToggle.appendChild(buildPhaseOption('break', 'перерыв', ICON_BREAK));
+  controls.appendChild(phaseToggle);
 
   card.appendChild(controls);
 

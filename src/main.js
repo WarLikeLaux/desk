@@ -7,10 +7,11 @@ import { renderTasks } from './tasks.js';
 import { addTimer, renderTimers, tickOnBoot, startTick } from './timers.js';
 import { setupEventListeners } from './events.js';
 import { ensureNotificationPermission } from './notifications.js';
+import { renderNotes, wireAddNoteButton } from './notes.js';
 
 const renderDateLabel = () => {
   const now = new Date();
-  dateEl.textContent = `${formatDate(now)} · ${formatTime(now)}`;
+  dateEl.textContent = `${formatDate(now)} · ${formatTime(now, true)}`;
 };
 
 const boot = () => {
@@ -21,11 +22,14 @@ const boot = () => {
   setupEventListeners();
   renderTasks();
   renderTimers();
+  renderNotes();
+  wireAddNoteButton();
   tickOnBoot();
   startTick();
   renderDateLabel();
 
-  setInterval(renderDateLabel, 30_000);
+  // Tick the wall clock every second so the user always sees a live time.
+  setInterval(renderDateLabel, 1000);
 };
 
 // `<script type="module">` is deferred by default — DOM is parsed before this runs.

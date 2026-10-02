@@ -27,8 +27,10 @@ import {
   cancelPendingTimerDelete,
   startTimerNameEdit,
   startTimerDurationEdit,
+  startTimerRemainingEdit,
   renderTimers,
 } from './timers.js';
+import { cancelPendingNoteDelete } from './notes.js';
 import { hideToast } from './toast.js';
 import { setupDragDrop } from './dragdrop.js';
 import { setupAudioUnlock } from './audio.js';
@@ -106,6 +108,14 @@ const wireOutsideClicks = () => {
         if (state.pendingTimerDeleteId) cancelPendingTimerDelete();
       });
     }
+    if (
+      state.pendingNoteDeleteId &&
+      !target.closest(`.note[data-id="${state.pendingNoteDeleteId}"]`)
+    ) {
+      requestAnimationFrame(() => {
+        if (state.pendingNoteDeleteId) cancelPendingNoteDelete();
+      });
+    }
   });
 };
 
@@ -141,9 +151,20 @@ const wireTimers = () => {
     if (!id) return;
     if (target.closest('.timer-toggle')) toggleTimerPaused(id);
     else if (target.closest('.timer-reset')) resetTimerPhase(id);
-    else if (target.closest('.timer-phase-btn')) switchTimerPhase(id);
-    else if (target.closest('.timer-delete')) requestDeleteTimer(id);
-    else if (target.closest('.timer-dur')) {
+    else if (target.closest('.timer-phase-option')) {
+      const opt = target.closest('.timer-phase-option');
+      if (opt instanceof HTMLElement) {
+        const target = /** @type {'work' | 'break'} */ (opt.dataset.target ?? 'work');
+        const timer = state.timers.find((t) => t.id === id);
+        if (timer && timer.phase !== target) switchTimerPhase(id);
+      }
+    } else if (target.closest('.timer-delete')) requestDeleteTimer(id);
+    else if (target.closest('.timer-time')) {
+      if (card.classList.contains('is-paused') && !card.classList.contains('is-expired')) {
+        startTimerRemainingEdit(card);
+      }
+      return;
+    } else if (target.closest('.timer-dur')) {
       const btn = target.closest('.timer-dur');
       if (btn instanceof HTMLButtonElement) {
         const field = /** @type {'work' | 'break'} */ (btn.dataset.field ?? 'work');

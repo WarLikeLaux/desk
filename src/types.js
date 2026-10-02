@@ -30,4 +30,12 @@
  * @typedef {'all' | 'active' | 'completed'} TaskFilter
  */
 
+/**
+ * @typedef {Object} Note
+ * @property {string} id
+ * @property {string} body
+ * @property {number} createdAt
+ * @property {number} updatedAt
+ */
+
 export {};

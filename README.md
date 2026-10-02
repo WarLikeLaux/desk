@@ -63,11 +63,12 @@ xdg-open "$HOME/code/desk/index.html"
 Requires Node.js ≥ 20 for the lint and typecheck toolchain. The site itself has no build step and no runtime dependencies — `src/` is loaded directly by the browser via native ES modules.
 
 ```bash
-npm ci                # install dev tools (eslint, prettier, stylelint, typescript)
+npm ci                # install dev tools (eslint, prettier, stylelint, typescript, impeccable)
 npm run format        # auto-format JS, CSS, JSON, MD
 npm run lint          # ESLint on src/
 npm run lint:css      # Stylelint on *.css
 npm run typecheck     # tsc --noEmit against JSDoc-annotated JS
+npm run design        # Impeccable detector on index.html and style.css (WCAG, fonts, AI-slop)
 npm run ci            # all of the above (what the CI workflow runs)
 ```
 

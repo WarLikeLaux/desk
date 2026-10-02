@@ -10,12 +10,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run format:check && npm run lint && npm run lint:css && npm run typecheck"
+    "design": "impeccable detect --no-advisory --json index.html style.css",
+    "ci": "npm run format:check && npm run lint && npm run lint:css && npm run typecheck && npm run design"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "eslint": "^9.13.0",
     "globals": "^15.11.0",
+    "impeccable": "^4.1.0",
     "prettier": "^3.3.3",
     "stylelint": "^16.10.0",
     "stylelint-config-standard": "^36.0.1",

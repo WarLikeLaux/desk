@@ -7,8 +7,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap"
       rel="stylesheet"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0b0d'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23232328' stroke-width='2'/%3E%3Cpath d='M16 6 A10 10 0 0 1 26 16' fill='none' stroke='%239dba85' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='1.4' fill='%239dba85'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -97,11 +102,13 @@
         </footer>
       </section>
 
-      <aside class="right-panel" aria-label="Боковая панель">
-        <div class="right-panel-empty">
-          <span class="right-panel-dot" aria-hidden="true"></span>
-          <p class="right-panel-text">Свободно</p>
-        </div>
+      <aside class="right-panel notes" id="notesPanel" aria-label="Заметки">
+        <header class="notes-header">
+          <span class="notes-label">заметки</span>
+          <span class="notes-count" id="notesCount">0</span>
+          <button class="notes-add" id="addNote" type="button" aria-label="Новая заметка">+</button>
+        </header>
+        <div class="notes-list" id="notesList"></div>
       </aside>
     </main>
 

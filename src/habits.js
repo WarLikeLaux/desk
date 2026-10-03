@@ -5,6 +5,8 @@ import { state } from './state.js';
 import { HABITS_KEY, loadHabits, saveHabits } from './storage.js';
 import { generateId } from './utils.js';
 import { showToast } from './toast.js';
+import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
+import { createReorderHandle, wireReorder } from './reorder.js';
 
 const section = /** @type {HTMLDetailsElement} */ (document.querySelector('#habitsSection'));
 const list = /** @type {HTMLUListElement} */ (document.querySelector('#habitsList'));
@@ -32,6 +34,17 @@ let displayedDate = habitDate();
 /** @type {string | null} */
 let editingId = null;
 let editingDraft = '';
+let pendingDeleteId = /** @type {string | null} */ (null);
+let pendingDeleteTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
+
+const cancelPendingDelete = () => {
+  if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+  pendingDeleteTimer = null;
+  const row = list.querySelector(`.habit[data-id="${pendingDeleteId}"]`);
+  row?.classList.remove('is-confirming');
+  setDeleteButtonState(row?.querySelector('.habit-delete') ?? null, false);
+  pendingDeleteId = null;
+};
 
 /** @param {string} action @param {string} label @param {string} icon */
 const actionButton = (action, label, icon) => {
@@ -41,6 +54,7 @@ const actionButton = (action, label, icon) => {
   button.className = `habit-action habit-${action}`;
   button.setAttribute('aria-label', label);
   button.innerHTML = icon;
+  if (action === 'delete') initDeleteButton(button, label);
   return button;
 };
 
@@ -48,8 +62,15 @@ const actionButton = (action, label, icon) => {
 const buildHabit = (habit) => {
   const done = habit.completedDates.includes(displayedDate);
   const row = document.createElement('li');
-  row.className = `habit${done ? ' is-done' : ''}`;
+  row.className = `habit${done ? ' is-done' : ''}${pendingDeleteId === habit.id ? ' is-confirming' : ''}`;
   row.dataset.id = habit.id;
+  const move = createReorderHandle(
+    'habit-action habit-move',
+    'Переместить привычку',
+    state.habits.items.length < 2 || editingId !== null,
+  );
+  move.dataset.action = 'move';
+  row.append(move);
   const check = actionButton(
     'toggle',
     `${done ? 'Снять отметку за сегодня' : 'Выполнено сегодня'}: ${habit.text}`,
@@ -100,6 +121,7 @@ const buildHabit = (habit) => {
       ),
     );
   }
+  setDeleteButtonState(row.querySelector('.habit-delete'), pendingDeleteId === habit.id);
   return row;
 };
 
@@ -170,6 +192,14 @@ const finishRename = (save) => {
 };
 
 export const wireHabits = () => {
+  wireReorder({
+    list,
+    cardSelector: '.habit',
+    handleSelector: '.habit-move',
+    items: () => state.habits.items,
+    save: saveHabits,
+    render: renderHabits,
+  });
   section.addEventListener('toggle', () => {
     if (state.habits.expanded === section.open) return;
     state.habits.expanded = section.open;
@@ -212,6 +242,7 @@ export const wireHabits = () => {
       saveHabits();
       renderHabits();
     } else if (button.dataset.action === 'rename') {
+      cancelPendingDelete();
       editingId = habit.id;
       editingDraft = habit.text;
       renderHabits();
@@ -223,6 +254,15 @@ export const wireHabits = () => {
     } else if (button.dataset.action === 'save' || button.dataset.action === 'cancel') {
       finishRename(button.dataset.action === 'save');
     } else if (button.dataset.action === 'delete') {
+      if (pendingDeleteId !== habit.id) {
+        cancelPendingDelete();
+        pendingDeleteId = habit.id;
+        row.classList.add('is-confirming');
+        setDeleteButtonState(button, true);
+        pendingDeleteTimer = setTimeout(cancelPendingDelete, 3000);
+        return;
+      }
+      cancelPendingDelete();
       const index = state.habits.items.indexOf(habit);
       state.habits.items.splice(index, 1);
       saveHabits();
@@ -249,6 +289,17 @@ export const wireHabits = () => {
     }
   });
   document.addEventListener('visibilitychange', refreshHabitDay);
+  document.addEventListener('click', (event) => {
+    if (
+      pendingDeleteId &&
+      event.target instanceof Element &&
+      !event.target.closest(`.habit[data-id="${pendingDeleteId}"]`)
+    )
+      cancelPendingDelete();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') cancelPendingDelete();
+  });
   window.addEventListener('focus', refreshHabitDay);
   window.addEventListener('storage', (event) => {
     if (event.key !== HABITS_KEY && event.key !== null) return;

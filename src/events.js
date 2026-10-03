@@ -1,8 +1,8 @@
 // @ts-check
 
-import { parseEstimate, formatEstimate, normalizeURL } from './utils.js';
+import { parseEstimate, normalizeURL } from './utils.js';
 import { openTaskEditor, wireTaskEditor } from './task-editor.js';
-import { loadTasks, loadTimers, loadNotes } from './storage.js';
+import { loadTasks, loadTimers, loadNotes, saveTimers } from './storage.js';
 import { renderTasks } from './tasks.js';
 import { renderNotes } from './notes.js';
 import { state } from './state.js';
@@ -45,6 +45,7 @@ import { cancelPendingNoteDelete, exitNoteFocus, wireNoteFocus } from './notes.j
 import { hideToast } from './toast.js';
 import { setupDragDrop } from './dragdrop.js';
 import { setupAudioUnlock } from './audio.js';
+import { wireReorder } from './reorder.js';
 
 const wireComposer = () => {
   const estimateInput = /** @type {HTMLInputElement} */ (document.querySelector('#taskEstimate'));
@@ -66,9 +67,9 @@ const wireComposer = () => {
 
   /** @param {'estimate' | 'link' | null} panel */
   const showPanel = (panel) => {
-    estimatePanel.hidden = panel !== 'estimate';
+    estimatePanel.hidden = panel !== 'estimate' && !estimateInput.value.trim();
     linkPanel.hidden = panel !== 'link';
-    estimateButton.setAttribute('aria-expanded', String(panel === 'estimate'));
+    estimateButton.setAttribute('aria-expanded', String(!estimatePanel.hidden));
     linkButton.setAttribute('aria-expanded', String(panel === 'link'));
     if (panel === 'estimate') estimateInput.focus();
     if (panel === 'link') linkInput.focus();
@@ -90,14 +91,6 @@ const wireComposer = () => {
   };
   const refreshMeta = () => {
     meta.replaceChildren();
-    const estimate = parseEstimate(estimateInput.value);
-    if (estimate)
-      addChip(formatEstimate(estimate), 'Убрать оценку времени', () => {
-        estimateInput.value = '';
-        estimateInput.setCustomValidity('');
-        refreshMeta();
-        estimateButton.focus();
-      });
     draftLinks.forEach((link, index) =>
       addChip(link.label, `Убрать ссылку «${link.label}»`, () => {
         draftLinks.splice(index, 1);
@@ -137,7 +130,7 @@ const wireComposer = () => {
     return valid;
   };
   estimateButton.addEventListener('click', () => {
-    showPanel(estimatePanel.hidden ? 'estimate' : null);
+    showPanel(estimatePanel.hidden || estimateInput.value.trim() ? 'estimate' : null);
   });
   linkButton.addEventListener('click', () => {
     showPanel(linkPanel.hidden ? 'link' : null);
@@ -148,7 +141,6 @@ const wireComposer = () => {
     refreshMeta();
     taskInput.focus();
   };
-  document.querySelector('#applyTaskEstimate')?.addEventListener('click', applyEstimate);
   estimatePanel.addEventListener('keydown', (event) => {
     if (
       event.key === 'Enter' &&
@@ -338,6 +330,14 @@ const wireGlobalKeys = () => {
 };
 
 const wireTimers = () => {
+  wireReorder({
+    list: timersListEl,
+    cardSelector: '.timer-card',
+    handleSelector: '.timer-move',
+    items: () => state.timers,
+    save: saveTimers,
+    render: renderTimers,
+  });
   addTimerBtn.addEventListener('click', (e) => {
     const t = e.shiftKey ? 'pomodoro' : 'work';
     addTimer(t);
@@ -354,14 +354,8 @@ const wireTimers = () => {
     if (!id) return;
     if (target.closest('.timer-toggle')) toggleTimerPaused(id);
     else if (target.closest('.timer-reset')) resetTimerPhase(id);
-    else if (target.closest('.timer-phase-option')) {
-      const opt = target.closest('.timer-phase-option');
-      if (opt instanceof HTMLElement) {
-        const target = /** @type {'work' | 'break'} */ (opt.dataset.target ?? 'work');
-        const timer = state.timers.find((t) => t.id === id);
-        if (timer && timer.phase !== target) switchTimerPhase(id);
-      }
-    } else if (target.closest('.timer-delete')) requestDeleteTimer(id);
+    else if (target.closest('.timer-phase-switch')) switchTimerPhase(id);
+    else if (target.closest('.timer-delete')) requestDeleteTimer(id);
     else if (target.closest('.timer-expand')) enterFocusMode(id);
     else if (target.closest('.timer-time')) {
       startTimerTimeEdit(card);

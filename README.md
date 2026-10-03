@@ -13,9 +13,11 @@ The layout has three columns: timers, tasks, and notes with habits. On desktop, 
 - **Enter** appends a task. **Ctrl/Cmd + Enter** and **Shift + Enter** prepend it.
 - **Checkbox** completes a task and moves it to the bottom. The all-view shows the first three completed tasks, with a button to reveal the rest.
 - **Double-click**, **⋯**, or the time estimate opens an editor for the task name, estimate, and attached links. Save applies changes, Esc cancels.
-- **The clock button** opens an estimate field for minutes, hours, and ranges: `30 мин`, `1–2 ч`, `30 мин – 1 ч`. «Готово» or Enter applies the estimate.
+- **The clock button** opens an estimate field to its left for minutes, hours, and ranges: `30 мин`, `1–2 ч`, `30 мин – 1 ч`. Enter returns focus to the task name, and adding the task saves its estimate.
+- Task estimates and timer durations display full Russian unit names: `1 - 2 часа`, `30 - 45 минут`, `1 час 30 минут`. Abbreviations remain accepted when entering estimates.
+- Estimates also accept `30`, `30 минут`, `30м`, `1 час`, `1,5ч`, `1ч 30м`, `1:30`, and `1h 30m`. Remaining time for unfinished tasks appears to the right of the heading. Range endpoints are summed separately, and unestimated active tasks have their own count. Completed tasks do not contribute. Active and completed filters keep the day's remaining time, while the deferred view has a separate total.
 - **The link button** opens a URL and optional name. «Прикрепить» or Enter attaches it to the draft. Add multiple links or remove any before creating the task. Links appear above the name. Pasting a URL over a fully selected name attaches it while preserving the name.
-- **Когда** in the **⋯** editor selects «Сегодня» or «На потом». New tasks created in the deferred view are deferred immediately.
+- **На потом / На сегодня** in the **⋯** editor changes the destination without closing the dialog. **Save** applies all edits and the destination together. **Cancel** or **Esc** discards them. New tasks created in the deferred view are deferred immediately.
 - **Drag** reorders tasks with a mouse.
 - **×** requests deletion confirmation. Click again within three seconds to delete.
 - **Очистить завершённые** removes completed tasks with an Undo toast.
@@ -25,9 +27,11 @@ The layout has three columns: timers, tasks, and notes with habits. On desktop, 
 
 ## Daily habits
 
-A collapsible section below the notes in the right column holds daily habits. Enter a name and press Enter to add one. The habit day starts at 09:00 in Omsk (Asia/Omsk), regardless of the device timezone. Checkmarks remain through the night and reset at 09:00. Habit names and completion history remain saved. Habit counts are separate from task progress.
+A collapsible section above the notes in the right column holds daily habits. Enter a name and press Enter to add one. The habit day starts at 09:00 in Omsk (Asia/Omsk), regardless of the device timezone. Checkmarks remain through the night and reset at 09:00. Habit names and completion history remain saved. Habit counts are separate from task progress.
 
-The pencil button renames a habit inline. Enter saves, Esc cancels. Deletion offers Undo. Habits, completion dates, and the section's expanded state persist across reloads.
+The pencil button renames a habit inline. Enter saves, Esc cancels. Deletion requires a second click and offers Undo afterward. Habits, completion dates, and the section's expanded state persist across reloads.
+
+Drag a habit's dotted handle with a mouse or touch to reorder it. With the handle focused, the up and down arrows move the habit. The order persists across reloads without changing completion dates. The handle and reorder behavior are shared with timers and notes.
 
 ## Timers
 
@@ -35,7 +39,8 @@ A default Pomodoro uses 52 minutes of work and a 17-minute break. Click "Нов�
 
 - **↺** resets the current phase to full duration.
 - **Pause / start** controls the countdown.
-- **Работа / перерыв** switches phases manually. At zero, the timer stops in an `expired` state and waits for the user's next action.
+- **The dotted handle** reorders timers with a mouse or touch. Up and down arrows move a focused handle. The order persists across reloads, and running timers keep counting down.
+- **Перейти к перерыву / Вернуться к работе** switches phases manually. The new phase waits for you to start it. At zero, the timer stops in an `expired` state and waits for the user's next action.
 - **Click a single-phase timer's time** to set its full duration using `MM:SS` or `H:MM:SS`, from one second to 24 hours. Editing pauses the countdown. Enter saves the new duration for starting and resetting, Esc cancels.
 - **Pomodoro durations** appear below the countdown and accept minutes or `H:MM`. Clicking the time while paused changes the current phase's remaining time.
 - **Double-click** the name to rename. The expand button opens a full-screen view.
@@ -47,7 +52,7 @@ Timers persist via timestamps. Reopening the page marks missed phases expired an
 
 ## Notes
 
-The right column shows short previews. Click a preview or "Открыть" to open a full-screen editor. Edits save automatically, and closing the editor immediately saves pending changes. Copy is available in both the card and editor. URLs found in the text appear as links below the editor.
+The right column shows short previews. Click a preview or the expand icon to open a full-screen editor. Edits save automatically, and closing the editor immediately saves pending changes. Copy is available in both the card and editor. URLs found in the text appear as links below the editor. Drag a note's dotted handle to reorder it with a mouse or touch. With the handle focused, use the up and down arrows to move the note. The order persists across reloads and edits. Deletion requires a second click on the same button, which keeps its size during confirmation.
 
 ## Storage
 
@@ -112,6 +117,9 @@ desk/
 │   ├── task-editor.js          # Task name, estimate, and link editor
 │   ├── habits.js               # Daily habits and completion dates
 │   ├── notes.js                # Note previews and full-screen editor
+│   ├── reorder.js              # Pointer and keyboard reordering of notes and timers
+│   ├── delete-button.js        # Shared deletion icons and confirmation states
+│   ├── tooltips.js             # Shared tooltips above scroll containers
 │   ├── timers.js               # Timer CRUD, render, tick, edit
 │   ├── dragdrop.js             # Task drag-and-drop
 │   ├── events.js               # Global event wiring

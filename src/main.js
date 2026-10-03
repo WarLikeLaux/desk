@@ -9,6 +9,7 @@ import { setupEventListeners } from './events.js';
 import { saveTasks } from './storage.js';
 import { renderNotes, wireAddNoteButton } from './notes.js';
 import { renderHabits, wireHabits, refreshHabitDay } from './habits.js';
+import { wireTooltips } from './tooltips.js';
 
 const renderDateLabel = () => {
   const now = new Date();
@@ -28,6 +29,7 @@ const boot = () => {
   renderHabits();
   wireHabits();
   wireAddNoteButton();
+  wireTooltips();
   tickOnBoot();
   startTick();
   renderDateLabel();

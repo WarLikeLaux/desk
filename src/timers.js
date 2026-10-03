@@ -1,4 +1,5 @@
 // @ts-check
+import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
 /** @typedef {import('./types.js').Timer} Timer */
 /** @typedef {import('./types.js').TimerPhase} TimerPhase */
 /** @typedef {import('./types.js').TimerType} TimerType */
@@ -10,6 +11,7 @@ import { showToast, hideToast } from './toast.js';
 import { playBeep } from './audio.js';
 import { ensureNotificationPermission, fireBrowserNotification } from './notifications.js';
 import { timersCountEl, timersListEl, focusOverlay, qs } from './dom.js';
+import { createReorderHandle } from './reorder.js';
 
 const RING_CIRCUMFERENCE = 2 * Math.PI * 50;
 const RING_RADIUS = 50;
@@ -18,6 +20,16 @@ const TICK_INTERVAL_MS = 250;
 
 const RESET_ICON =
   '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a6 6 0 1 1 0 4M4 4v4h4"/></svg>';
+
+/** @param {HTMLElement} button @param {Timer} timer */
+const updatePhaseAction = (button, timer) => {
+  const label = qs('.timer-phase-switch-label', button);
+  if (label) label.textContent = nextPhaseLabel(timer);
+};
+
+/** @param {Timer} timer */
+const nextPhaseLabel = (timer) =>
+  timer.phase === 'work' ? 'Перейти к перерыву' : 'Вернуться к работе';
 
 /** @param {HTMLElement} button @param {Timer} timer */
 const updateToggleButton = (button, timer) => {
@@ -99,8 +111,6 @@ const updateTimerDisplay = (timer, root = timersListEl) => {
   card.classList.toggle('is-break', timer.phase === 'break');
   card.classList.toggle('is-work', timer.type === 'work');
   card.classList.toggle('is-long', total >= 3600);
-  const phaseEl = qs('.timer-phase', card);
-  if (phaseEl) phaseEl.textContent = timer.phase === 'work' ? 'работа' : 'перерыв';
   const ringProgress = qs('.timer-ring-progress', card);
   if (ringProgress instanceof SVGElement) {
     const progress = timer.expired
@@ -120,12 +130,8 @@ const updateTimerDisplay = (timer, root = timersListEl) => {
   }
   const toggleBtn = qs('.timer-toggle', card);
   if (toggleBtn) updateToggleButton(toggleBtn, timer);
-  card.querySelectorAll('.timer-phase-option').forEach((option) => {
-    if (!(option instanceof HTMLElement)) return;
-    const active = option.dataset.target === timer.phase;
-    option.classList.toggle('is-active', active);
-    option.setAttribute('aria-selected', String(active));
-  });
+  const phaseButton = qs('.timer-phase-switch', card);
+  if (phaseButton) updatePhaseAction(phaseButton, timer);
   // Keep the focus-mode clone in sync with the canonical card.
   if (root === timersListEl && state.focusedTimerId === timer.id) {
     updateTimerDisplay(timer, focusOverlay);
@@ -141,7 +147,7 @@ const onPhaseEnd = (timer) => {
   showToast(
     timer.phase === 'work' ? `${wasPhase} завершена` : `${wasPhase} завершён`,
     isSinglePhase ? null : () => switchTimerPhase(timer.id),
-    isSinglePhase ? 'Закрыть' : timer.phase === 'work' ? 'Перерыв' : 'Работа',
+    isSinglePhase ? 'Закрыть' : nextPhaseLabel(timer),
   );
   const card = qs(`.timer-card[data-id="${timer.id}"]`, timersListEl);
   if (card) card.classList.add('is-expired');
@@ -174,13 +180,13 @@ export const requestDeleteTimer = (id) => {
   document.querySelectorAll('.timer-card.is-confirming').forEach((el) => {
     el.classList.remove('is-confirming');
     const b = el.querySelector('.timer-delete');
-    if (b) b.textContent = '×';
+    setDeleteButtonState(b, false);
   });
   const card = qs(`.timer-card[data-id="${id}"]`, timersListEl);
   if (!card) return;
   card.classList.add('is-confirming');
   const btn = qs('.timer-delete', card);
-  if (btn) btn.textContent = '× удалить?';
+  setDeleteButtonState(btn, true);
   state.pendingTimerDeleteId = id;
   if (state.pendingTimerDeleteTimerId) clearTimeout(state.pendingTimerDeleteTimerId);
   state.pendingTimerDeleteTimerId = setTimeout(
@@ -195,7 +201,7 @@ export const cancelPendingTimerDelete = () => {
   if (card) {
     card.classList.remove('is-confirming');
     const btn = qs('.timer-delete', card);
-    if (btn) btn.textContent = '×';
+    setDeleteButtonState(btn, false);
   }
   state.pendingTimerDeleteId = null;
   if (state.pendingTimerDeleteTimerId) clearTimeout(state.pendingTimerDeleteTimerId);
@@ -264,18 +270,6 @@ export const switchTimerPhase = (id) => {
     card.classList.toggle('is-break', timer.phase === 'break');
     card.classList.remove('is-expired');
     card.classList.add('is-paused');
-    const phaseEl = qs('.timer-phase', card);
-    if (phaseEl) phaseEl.textContent = timer.phase === 'work' ? 'работа' : 'перерыв';
-    const phaseToggle = qs('.timer-phase-toggle', card);
-    if (phaseToggle) {
-      phaseToggle.querySelectorAll('.timer-phase-option').forEach((opt) => {
-        if (!(opt instanceof HTMLElement)) return;
-        const target = opt.dataset.target;
-        const active = target === timer.phase;
-        opt.classList.toggle('is-active', active);
-        opt.setAttribute('aria-selected', String(active));
-      });
-    }
   }
   updateTimerDisplay(timer);
 };
@@ -449,6 +443,9 @@ const buildTimerCard = (timer) => {
   const header = document.createElement('div');
   header.className = 'timer-header';
 
+  const move = createReorderHandle('timer-move', 'Переместить таймер', state.timers.length < 2);
+  header.append(move);
+
   const name = document.createElement('span');
   name.className = 'timer-name';
   name.textContent = timer.name;
@@ -467,8 +464,7 @@ const buildTimerCard = (timer) => {
   const del = document.createElement('button');
   del.className = 'timer-delete';
   del.type = 'button';
-  del.setAttribute('aria-label', 'Удалить таймер');
-  del.textContent = '×';
+  initDeleteButton(del, 'Удалить таймер');
   header.appendChild(del);
 
   card.appendChild(header);
@@ -497,11 +493,6 @@ const buildTimerCard = (timer) => {
   const initialRemaining = getPhaseDuration(timer);
   fillTimerTime(timeEl, initialRemaining, initialRemaining >= 3600);
   timeWrap.appendChild(timeEl);
-
-  const phase = document.createElement('div');
-  phase.className = 'timer-phase';
-  phase.textContent = timer.phase === 'work' ? 'работа' : 'перерыв';
-  if (timer.type === 'pomodoro') timeWrap.appendChild(phase);
 
   ringWrap.appendChild(timeWrap);
 
@@ -550,34 +541,14 @@ const buildTimerCard = (timer) => {
     card.appendChild(durations);
   }
 
-  let phaseToggle = null;
+  let phaseButton = /** @type {HTMLButtonElement | null} */ (null);
   if (timer.type === 'pomodoro') {
-    phaseToggle = document.createElement('div');
-    phaseToggle.className = 'timer-phase-toggle';
-    phaseToggle.setAttribute('role', 'tablist');
-    phaseToggle.setAttribute('aria-label', 'Фаза таймера');
-
-    /**
-     * @param {'work' | 'break'} target
-     * @param {string} label
-     */
-    const buildPhaseOption = (target, label) => {
-      const opt = document.createElement('button');
-      opt.className = `timer-phase-option${timer.phase === target ? ' is-active' : ''}`;
-      opt.type = 'button';
-      opt.dataset.target = target;
-      opt.setAttribute('role', 'tab');
-      opt.setAttribute('aria-selected', String(timer.phase === target));
-      const text = document.createElement('span');
-      text.className = 'timer-phase-option-label';
-      text.textContent = label;
-      opt.append(text);
-      return opt;
-    };
-
-    phaseToggle.appendChild(buildPhaseOption('work', 'Работа'));
-    phaseToggle.appendChild(buildPhaseOption('break', 'Перерыв'));
-    card.appendChild(phaseToggle);
+    phaseButton = document.createElement('button');
+    phaseButton.className = 'timer-phase-switch';
+    phaseButton.type = 'button';
+    phaseButton.innerHTML =
+      '<span class="timer-phase-switch-label"></span><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h10m-3-3 3 3-3 3M13 11H3m3-3-3 3 3 3" /></svg>';
+    updatePhaseAction(phaseButton, timer);
   }
 
   const controls = document.createElement('div');
@@ -596,6 +567,7 @@ const buildTimerCard = (timer) => {
   toggleBtn.type = 'button';
   updateToggleButton(toggleBtn, timer);
   controls.appendChild(toggleBtn);
+  if (phaseButton) controls.appendChild(phaseButton);
 
   card.appendChild(controls);
 
@@ -606,7 +578,7 @@ export const renderTimers = () => {
   document.querySelectorAll('.timer-card.is-confirming').forEach((el) => {
     el.classList.remove('is-confirming');
     const b = el.querySelector('.timer-delete');
-    if (b) b.textContent = '×';
+    setDeleteButtonState(b, false);
   });
 
   timersListEl.innerHTML = '';
@@ -630,7 +602,7 @@ export const renderTimers = () => {
     if (card) {
       card.classList.add('is-confirming');
       const btn = card.querySelector('.timer-delete');
-      if (btn) btn.textContent = '× удалить?';
+      setDeleteButtonState(btn, true);
     } else {
       state.pendingTimerDeleteId = null;
       if (state.pendingTimerDeleteTimerId) clearTimeout(state.pendingTimerDeleteTimerId);

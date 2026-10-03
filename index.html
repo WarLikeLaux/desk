@@ -25,8 +25,8 @@
           <span class="timers-count" id="timersCount">0</span>
         </header>
         <div class="timers-list" id="timersList"></div>
-        <button class="timers-add" id="addTimer" type="button">
-          <span class="timers-add-glyph" aria-hidden="true">+</span>
+        <button class="panel-add timers-add" id="addTimer" type="button">
+          <span class="panel-add-glyph" aria-hidden="true">+</span>
           <span>Новый таймер</span>
         </button>
       </aside>
@@ -41,8 +41,37 @@
               <span class="progress-total" id="progressTotal">0</span>
             </span>
           </div>
-          <h1 class="title">Сегодня</h1>
-          <p class="subtitle" id="subtitle">Список текущих задач</p>
+          <div class="header-heading">
+            <div class="header-copy">
+              <h1 class="title">Сегодня</h1>
+              <p class="subtitle" id="subtitle">Список текущих задач</p>
+            </div>
+            <div
+              class="task-plan"
+              id="taskPlan"
+              role="status"
+              tabindex="0"
+              data-tooltip="Оценка времени по оставшимся задачам"
+              hidden
+            >
+              <div class="task-plan-time">
+                <svg
+                  viewBox="0 0 16 16"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <circle cx="8" cy="8" r="5.5" />
+                  <path d="M8 4.5V8l2.5 1.5" />
+                </svg>
+                <span class="task-plan-value" id="taskPlanValue"></span>
+              </div>
+              <span class="task-plan-label" id="taskPlanLabel" hidden></span>
+            </div>
+          </div>
         </header>
 
         <form class="composer" id="composer" autocomplete="off" novalidate>
@@ -58,6 +87,14 @@
               spellcheck="false"
               aria-label="Название новой задачи"
             />
+            <div class="composer-estimate-field" id="composerEstimatePanel" hidden>
+              <input
+                id="taskEstimate"
+                type="text"
+                placeholder="30 мин"
+                aria-label="Планируемое время, например 30 мин или 1–2 ч"
+              />
+            </div>
             <button
               class="composer-tool"
               id="toggleTaskEstimate"
@@ -107,15 +144,6 @@
             <button class="composer-submit" type="submit" aria-label="Добавить задачу">
               <kbd class="composer-hint">Enter</kbd>
             </button>
-          </div>
-          <div class="composer-panel composer-estimate-panel" id="composerEstimatePanel" hidden>
-            <input
-              id="taskEstimate"
-              type="text"
-              placeholder="30 мин или 1–2 ч"
-              aria-label="Планируемое время"
-            />
-            <button class="text-button" id="applyTaskEstimate" type="button">Готово</button>
           </div>
           <div class="composer-panel composer-link-panel" id="composerLinkPanel" hidden>
             <input
@@ -234,13 +262,7 @@
         </footer>
       </section>
 
-      <aside class="right-panel notes" id="notesPanel" aria-label="Заметки и привычки">
-        <header class="notes-header">
-          <span class="notes-label">заметки</span>
-          <span class="notes-count" id="notesCount">0</span>
-          <button class="notes-add" id="addNote" type="button" aria-label="Новая заметка">+</button>
-        </header>
-        <div class="notes-list" id="notesList"></div>
+      <aside class="right-panel notes" id="notesPanel" aria-label="Привычки и заметки">
         <details class="habits" id="habitsSection" open>
           <summary class="habits-heading">
             <svg
@@ -266,23 +288,15 @@
           </summary>
           <div class="habits-body">
             <ul class="habits-list" id="habitsList" aria-label="Привычки на сегодня"></ul>
-            <form class="habit-composer" id="habitComposer" autocomplete="off">
-              <svg
-                viewBox="0 0 16 16"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                aria-hidden="true"
-              >
-                <path d="M8 3v10M3 8h10" />
-              </svg>
+            <form class="composer-main" id="habitComposer" autocomplete="off">
+              <span class="composer-glyph" aria-hidden="true">+</span>
               <input
                 id="habitInput"
+                class="composer-input"
                 type="text"
                 placeholder="Добавить привычку"
                 maxlength="200"
+                spellcheck="false"
                 aria-label="Название новой ежедневной привычки"
               />
               <button class="composer-submit" type="submit" aria-label="Добавить привычку">
@@ -291,6 +305,15 @@
             </form>
           </div>
         </details>
+        <header class="notes-header">
+          <span class="notes-label">заметки</span>
+          <span class="notes-count" id="notesCount">0</span>
+        </header>
+        <div class="notes-list" id="notesList"></div>
+        <button class="panel-add notes-add" id="addNote" type="button">
+          <span class="panel-add-glyph" aria-hidden="true">+</span>
+          <span>Новая заметка</span>
+        </button>
       </aside>
     </main>
 
@@ -313,44 +336,75 @@
         <header class="editor-header">
           <h2 id="taskEditorTitle">Изменить задачу</h2>
           <button id="closeTaskEdit" class="editor-close" type="button" aria-label="Закрыть">
-            ×
+            <svg
+              viewBox="0 0 16 16"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <path d="m4 4 8 8M12 4l-8 8" />
+            </svg>
           </button>
         </header>
-        <label class="editor-field editor-name"
-          >Название<input id="editTaskText" type="text" required
-        /></label>
-        <div class="editor-options">
-          <label class="editor-field"
-            >Время<input id="editTaskEstimate" type="text" placeholder="30 мин или 1–2 ч"
-          /></label>
-          <label class="editor-field"
-            >Когда
-            <select id="editTaskLater">
-              <option value="today">Сегодня</option>
-              <option value="later">На потом</option>
-            </select>
-          </label>
-        </div>
-        <section class="editor-links" aria-label="Ссылки задачи">
-          <div class="editor-links-heading">
-            <span>Ссылки</span>
-            <button id="addTaskLink" class="text-button" type="button">
-              <svg
-                viewBox="0 0 16 16"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                aria-hidden="true"
-              >
-                <path d="M8 3v10M3 8h10" />
-              </svg>
-              Добавить
-            </button>
+        <div class="editor-body">
+          <textarea
+            id="editTaskText"
+            class="editor-name"
+            rows="2"
+            aria-label="Название задачи"
+            placeholder="Название задачи"
+            required
+          ></textarea>
+          <div class="editor-options">
+            <label class="editor-field editor-estimate">
+              Время
+              <input id="editTaskEstimate" type="text" placeholder="30 мин или 1–2 ч" />
+            </label>
+            <div class="editor-field editor-bucket">
+              <span>Раздел</span>
+              <div class="editor-bucket-control">
+                <span id="editTaskBucket" aria-live="polite">Сегодня</span>
+                <button id="moveTaskBucket" class="text-button editor-move" type="button">
+                  <span id="moveTaskBucketLabel">На потом</span>
+                  <svg
+                    viewBox="0 0 16 16"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 8h10m-4-4 4 4-4 4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
-          <div id="editTaskLinks" class="editor-links-list"></div>
-        </section>
+          <section class="editor-links" aria-label="Ссылки задачи">
+            <div class="editor-links-heading">
+              <span>Ссылки</span>
+              <button id="addTaskLink" class="text-button" type="button">
+                <svg
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  aria-hidden="true"
+                >
+                  <path d="M8 3v10M3 8h10" />
+                </svg>
+                Добавить
+              </button>
+            </div>
+            <div id="editTaskLinks" class="editor-links-list"></div>
+          </section>
+        </div>
         <footer class="editor-footer">
           <button id="cancelTaskEdit" class="text-button" type="button">Отмена</button>
           <button class="primary-button" type="submit">Сохранить</button>

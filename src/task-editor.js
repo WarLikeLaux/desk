@@ -8,11 +8,28 @@ import { formatEstimate, normalizeURL, parseEstimate } from './utils.js';
 
 const dialog = /** @type {HTMLDialogElement} */ (document.querySelector('#taskEditor'));
 const form = /** @type {HTMLFormElement} */ (document.querySelector('#taskEditorForm'));
-const textInput = /** @type {HTMLInputElement} */ (document.querySelector('#editTaskText'));
+const textInput = /** @type {HTMLTextAreaElement} */ (document.querySelector('#editTaskText'));
 const estimateInput = /** @type {HTMLInputElement} */ (document.querySelector('#editTaskEstimate'));
-const laterInput = /** @type {HTMLSelectElement} */ (document.querySelector('#editTaskLater'));
+const moveButton = /** @type {HTMLButtonElement} */ (document.querySelector('#moveTaskBucket'));
+const bucketLabel = /** @type {HTMLElement} */ (document.querySelector('#editTaskBucket'));
+const moveLabel = /** @type {HTMLElement} */ (document.querySelector('#moveTaskBucketLabel'));
 const linksList = /** @type {HTMLElement} */ (document.querySelector('#editTaskLinks'));
 let editingId = /** @type {string | null} */ (null);
+let draftBucket = /** @type {Task['bucket']} */ ('today');
+
+const renderBucket = () => {
+  bucketLabel.textContent = draftBucket === 'today' ? 'Сегодня' : 'На потом';
+  moveLabel.textContent = draftBucket === 'today' ? 'На потом' : 'На сегодня';
+  moveButton.setAttribute(
+    'aria-label',
+    draftBucket === 'today' ? 'Перенести на потом' : 'Перенести на сегодня',
+  );
+};
+
+const resizeTitle = () => {
+  textInput.style.height = 'auto';
+  textInput.style.height = `${textInput.scrollHeight}px`;
+};
 
 /** @param {string} [label] @param {string} [url] */
 const addLinkRow = (label = '', url = '') => {
@@ -29,10 +46,12 @@ const addLinkRow = (label = '', url = '') => {
   address.setAttribute('aria-label', 'Адрес ссылки');
   address.value = url;
   address.addEventListener('input', () => address.setCustomValidity(''));
+  name.addEventListener('input', () => address.setCustomValidity(''));
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'link-remove';
-  remove.textContent = '×';
+  remove.innerHTML =
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>';
   remove.setAttribute('aria-label', 'Убрать ссылку');
   remove.addEventListener('click', () => row.remove());
   row.append(address, name, remove);
@@ -49,10 +68,12 @@ export const openTaskEditor = (id) => {
   textInput.setCustomValidity('');
   estimateInput.value = formatEstimate(task.estimate);
   estimateInput.setCustomValidity('');
-  laterInput.value = task.bucket;
+  draftBucket = task.bucket;
+  renderBucket();
   linksList.replaceChildren();
   task.links.forEach((link) => addLinkRow(link.label, link.url));
   dialog.showModal();
+  resizeTitle();
   textInput.focus();
 };
 
@@ -67,7 +88,19 @@ export const wireTaskEditor = () => {
   document.querySelector('#cancelTaskEdit')?.addEventListener('click', () => dialog.close());
   document.querySelector('#closeTaskEdit')?.addEventListener('click', () => dialog.close());
   estimateInput.addEventListener('input', () => estimateInput.setCustomValidity(''));
-  textInput.addEventListener('input', () => textInput.setCustomValidity(''));
+  textInput.addEventListener('input', () => {
+    textInput.setCustomValidity('');
+    resizeTitle();
+  });
+  window.addEventListener('resize', () => {
+    if (dialog.open) resizeTitle();
+  });
+  textInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
   textInput.addEventListener('paste', (event) => {
     const pasted = event.clipboardData?.getData('text/plain') ?? '';
     const url = normalizeURL(pasted);
@@ -92,8 +125,7 @@ export const wireTaskEditor = () => {
     )
       dialog.close();
   });
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
+  const saveTask = () => {
     const task = state.tasks.find((t) => t.id === editingId);
     if (!task) return;
     const text = textInput.value.trim();
@@ -120,7 +152,7 @@ export const wireTaskEditor = () => {
     task.text = text;
     task.estimate = estimate;
     task.links = links;
-    task.bucket = laterInput.value === 'later' ? 'later' : 'today';
+    task.bucket = draftBucket;
     if (task.bucket === 'later') {
       task.completed = false;
       delete task.completedAt;
@@ -128,5 +160,13 @@ export const wireTaskEditor = () => {
     saveTasks();
     renderTasks();
     dialog.close();
+  };
+  moveButton.addEventListener('click', () => {
+    draftBucket = draftBucket === 'today' ? 'later' : 'today';
+    renderBucket();
+  });
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveTask();
   });
 };

@@ -101,13 +101,16 @@ export const formatMMSS = (secs, withHours = secs >= 3600) => {
   return `${pad(m)}:${pad(s)}`;
 };
 
-/** Render a duration in human-friendly form: "8 ч", "2 ч 30 мин", or "45 мин". @param {number} secs */
+/** Render a duration with full Russian unit names. @param {number} secs */
 export const formatDuration = (secs) => {
   const minutes = Math.max(0, Math.round(secs / 60));
-  if (minutes < 60) return `${minutes} мин`;
+  const minuteText = (/** @type {number} */ value) =>
+    `${value} ${pluralize(value, ['минута', 'минуты', 'минут'])}`;
+  if (minutes < 60) return minuteText(minutes);
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`;
+  const hours = `${h} ${pluralize(h, ['час', 'часа', 'часов'])}`;
+  return m === 0 ? hours : `${hours} ${minuteText(m)}`;
 };
 
 /** Generate a short, collision-resistant id. */
@@ -162,25 +165,36 @@ export const normalizeURL = (value) => {
 
 /** @param {string} value @returns {{min: number, max: number} | null} */
 export const parseEstimate = (value) => {
-  const raw = value.trim().toLowerCase().replaceAll(',', '.');
+  const raw = value
+    .trim()
+    .toLowerCase()
+    .replaceAll(',', '.')
+    .replace(/\s+до\s+/, '–');
   if (!raw) return null;
   const parts = raw.split(/\s*[-–—]\s*/);
   if (parts.length > 2) return null;
-  const inferredHours = parts.length === 2 && /^\d+(?:\.\d+)?\s*ч(?:ас(?:а|ов)?)?$/.test(parts[1]);
+  const hourUnit = '(?:ч(?:ас(?:а|ов)?)?|h(?:ours?|rs?)?)';
+  const minuteUnit = '(?:м(?:ин(?:ут(?:а|ы)?)?)?|m(?:in(?:ute)?s?)?)';
+  const clockPattern = /^(\d{1,3}):([0-5]\d)$/;
+  const hourSuffix = new RegExp(`${hourUnit}\\.?$`);
+  const durationPattern = new RegExp(
+    `^(?:(\\d+(?:\\.\\d+)?)\\s*${hourUnit}\\.?\\s*)?(?:(\\d+(?:\\.\\d+)?)\\s*(?:${minuteUnit}\\.?)?)?$`,
+  );
+  const inferredHours =
+    parts.length === 2 && parts.some((part) => hourSuffix.test(part) || clockPattern.test(part));
   /** @param {string} part @param {boolean} hours */
   const parsePart = (part, hours) => {
-    const match =
-      /^(?:(\d+(?:\.\d+)?)\s*ч(?:ас(?:а|ов)?)?\s*)?(?:(\d+(?:\.\d+)?)\s*(?:мин(?:ут(?:а|ы)?)?)?)?$/.exec(
-        part.trim(),
-      );
-    if (!match || (!match[1] && !match[2])) return null;
-    const minutes =
-      Number(match[1] ?? 0) * 60 +
-      Number(match[2] ?? 0) * (hours && /^\d+(?:\.\d+)?$/.test(part.trim()) ? 60 : 1);
+    const clock = clockPattern.exec(part);
+    const match = durationPattern.exec(part);
+    if (!clock && (!match || (!match[1] && !match[2]))) return null;
+    const minutes = clock
+      ? Number(clock[1]) * 60 + Number(clock[2])
+      : Number(match?.[1] ?? 0) * 60 +
+        Number(match?.[2] ?? 0) * (hours && /^\d+(?:\.\d+)?$/.test(part) ? 60 : 1);
     return minutes >= 1 && minutes <= 10080 ? Math.round(minutes) : null;
   };
   const min = parsePart(parts[0], inferredHours);
-  const max = parts.length === 2 ? parsePart(parts[1], false) : min;
+  const max = parts.length === 2 ? parsePart(parts[1], inferredHours) : min;
   return min !== null && max !== null && max >= min ? { min, max } : null;
 };
 
@@ -189,9 +203,10 @@ export const formatEstimate = (estimate) => {
   if (!estimate) return '';
   const { min, max } = estimate;
   if (min === max) return formatDuration(min * 60);
-  if (min % 60 === 0 && max % 60 === 0) return `${min / 60}–${max / 60} ч`;
-  if (max < 60) return `${min}–${max} мин`;
-  return `${formatDuration(min * 60)} – ${formatDuration(max * 60)}`;
+  if (min % 60 === 0 && max % 60 === 0)
+    return `${min / 60} - ${max / 60} ${pluralize(max / 60, ['час', 'часа', 'часов'])}`;
+  if (max < 60) return `${min} - ${max} ${pluralize(max, ['минута', 'минуты', 'минут'])}`;
+  return `${formatDuration(min * 60)} - ${formatDuration(max * 60)}`;
 };
 
 /** @param {string} text @returns {Promise<boolean>} */

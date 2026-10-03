@@ -3,6 +3,7 @@
 - Static site. No build step, no bundler, no framework. `index.html` loads `style.css` and `src/main.js` directly via native ES modules.
 - User-facing text is Russian. Code identifiers, comments, and commit messages are English.
 - All colors are CSS variables at the top of `style.css` (`--accent`, `--break`, `--danger`, etc.). Add a new one there before referencing it.
+- Treat the interface as one product. When improving a shared pattern, inspect every place it appears and apply the same behavior and visual rules to all equivalent controls across tasks, habits, timers, notes, and dialogs. Reuse shared helpers, components, and CSS instead of copying markup or adding local overrides. Differences should follow real context constraints, such as density or viewport size, rather than accidental drift. Verify affected siblings on desktop, touch, and keyboard before finishing.
 - All timers and tasks persist in `localStorage`. Keys live in `src/storage.js` (`TASKS_KEY`, `TIMERS_KEY`). Bump the version suffix when changing the data shape and add a migration branch in `loadTimers` / `loadTasks`.
 - Types live in `src/types.js` as JSDoc typedefs. Keep them in sync with the data model. The repo runs `tsc --noEmit` to typecheck JSDoc-annotated files; don't add `// @ts-nocheck` to silence errors.
 - Layout is a three-column grid in `.app` (CSS). The right column holds notes (`<aside class="notes">`); adding new sections there is allowed, but never replace the notes panel without an explicit request.

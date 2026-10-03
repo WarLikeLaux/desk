@@ -1,4 +1,5 @@
 // @ts-check
+import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
 /** @typedef {import('./types.js').Task} Task */
 /** @typedef {import('./types.js').TaskFilter} TaskFilter */
 
@@ -154,11 +155,11 @@ export const requestDeleteTask = (li, id) => {
   document.querySelectorAll('.task.is-confirming').forEach((el) => {
     el.classList.remove('is-confirming');
     const b = el.querySelector('.delete');
-    if (b) b.textContent = '×';
+    setDeleteButtonState(b, false);
   });
   li.classList.add('is-confirming');
   const btn = li.querySelector('.delete');
-  if (btn) btn.textContent = 'Удалить?';
+  setDeleteButtonState(btn, true);
   state.pendingDeleteId = id;
   if (state.pendingDeleteTimer) clearTimeout(state.pendingDeleteTimer);
   state.pendingDeleteTimer = setTimeout(() => cancelPendingTaskDelete(), PENDING_DELETE_TIMEOUT_MS);
@@ -170,7 +171,7 @@ export const cancelPendingTaskDelete = () => {
   if (li) {
     li.classList.remove('is-confirming');
     const b = li.querySelector('.delete');
-    if (b) b.textContent = '×';
+    setDeleteButtonState(b, false);
   }
   state.pendingDeleteId = null;
   if (state.pendingDeleteTimer) clearTimeout(state.pendingDeleteTimer);
@@ -251,6 +252,7 @@ const buildTaskEl = (task) => {
   estimate.className = 'task-estimate task-edit-button';
   estimate.type = 'button';
   estimate.textContent = formatEstimate(task.estimate);
+  estimate.dataset.tooltip = formatEstimate(task.estimate);
   estimate.hidden = !task.estimate;
   estimate.setAttribute(
     'aria-label',
@@ -270,8 +272,7 @@ const buildTaskEl = (task) => {
   const del = document.createElement('button');
   del.className = 'delete';
   del.type = 'button';
-  del.setAttribute('aria-label', `Удалить задачу «${task.text}»`);
-  del.textContent = '×';
+  initDeleteButton(del, `Удалить задачу «${task.text}»`);
   actions.append(del);
   li.append(actions);
   return li;
@@ -310,7 +311,7 @@ export const renderTasks = () => {
     if (li) {
       li.classList.add('is-confirming');
       const btn = li.querySelector('.delete');
-      if (btn) btn.textContent = 'Удалить?';
+      setDeleteButtonState(btn, true);
     } else {
       state.pendingDeleteId = null;
       if (state.pendingDeleteTimer) clearTimeout(state.pendingDeleteTimer);
@@ -322,6 +323,53 @@ export const renderTasks = () => {
   const completedCount = today.filter((t) => t.completed).length;
   const laterCount = state.tasks.filter((t) => t.bucket === 'later').length;
   const isLater = state.filter === 'later';
+  const unfinishedTasks = (isLater ? currentTasks() : today).filter((task) => !task.completed);
+  const unfinished = { min: 0, max: 0 };
+  let estimatedCount = 0;
+  let unestimatedCount = 0;
+  unfinishedTasks.forEach((task) => {
+    if (!task.estimate) {
+      unestimatedCount += 1;
+      return;
+    }
+    estimatedCount += 1;
+    unfinished.min += task.estimate.min;
+    unfinished.max += task.estimate.max;
+  });
+  const planEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlan'));
+  const valueEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlanValue'));
+  const labelEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlanLabel'));
+  const estimateText = formatEstimate(unfinished);
+  const splitRange =
+    unfinished.min !== unfinished.max &&
+    unfinished.max >= 60 &&
+    (unfinished.min % 60 !== 0 || unfinished.max % 60 !== 0);
+  const timeParts = !estimatedCount
+    ? ['без оценки']
+    : splitRange
+      ? [
+          formatEstimate({ min: unfinished.min, max: unfinished.min }),
+          ` - ${formatEstimate({ min: unfinished.max, max: unfinished.max })}`,
+        ]
+      : [estimateText];
+  valueEl.replaceChildren(
+    ...timeParts.map((text) => {
+      const part = document.createElement('span');
+      part.textContent = text;
+      return part;
+    }),
+  );
+  labelEl.textContent = estimatedCount
+    ? `${unestimatedCount} без оценки`
+    : `${unestimatedCount} ${pluralize(unestimatedCount, ['задача', 'задачи', 'задач'])}`;
+  labelEl.hidden = unestimatedCount === 0;
+  planEl.setAttribute(
+    'aria-label',
+    estimatedCount
+      ? `Осталось по оценённым задачам: ${estimateText}${unestimatedCount ? `. Без оценки: ${unestimatedCount}` : ''}`
+      : `Без оценки: ${unestimatedCount} ${pluralize(unestimatedCount, ['задача', 'задачи', 'задач'])}`,
+  );
+  planEl.hidden = unfinishedTasks.length === 0;
   const active = isLater ? laterCount : activeCount;
   emptyState.hidden = visible.length !== 0;
   if (isLater) {

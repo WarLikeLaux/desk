@@ -6,6 +6,8 @@ import { saveNotes } from './storage.js';
 import { generateId, copyText, normalizeURL } from './utils.js';
 import { showToast } from './toast.js';
 import { notesListEl, notesCountEl, addNoteBtn, noteFocusOverlay } from './dom.js';
+import { createReorderHandle, wireReorder } from './reorder.js';
+import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
 
 const SAVE_DEBOUNCE_MS = 250;
 const PENDING_DELETE_TIMEOUT_MS = 3000;
@@ -52,12 +54,28 @@ const formatStamp = (ms) => {
 /** @param {Note} note @param {HTMLButtonElement} button */
 const copyNote = async (note, button) => {
   const ok = await copyText(note.body);
-  button.textContent = ok ? 'Скопировано' : 'Не скопировано';
-  setTimeout(() => {
-    button.textContent = 'Копировать';
-  }, 2000);
+  if (button.classList.contains('note-focus-copy')) {
+    button.textContent = ok ? 'Скопировано' : 'Не скопировано';
+    setTimeout(() => {
+      button.textContent = 'Копировать';
+    }, 2000);
+  }
   if (!noteFocusOverlay.open)
     showToast(ok ? 'Заметка скопирована' : 'Не удалось скопировать заметку', null, 'Закрыть');
+};
+
+/** @param {HTMLButtonElement} button @param {string} label @param {string} icon */
+const setNoteAction = (button, label, icon) => {
+  button.setAttribute('aria-label', label);
+  button.dataset.tooltip = label;
+  button.innerHTML = `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>`;
+};
+
+/** @param {string} id @param {boolean} confirming */
+const setDeleteConfirmation = (id, confirming) => {
+  const card = notesListEl.querySelector(`.note[data-id="${id}"]`);
+  card?.classList.toggle('is-confirming', confirming);
+  setDeleteButtonState(card?.querySelector('.note-delete') ?? null, confirming);
 };
 
 /** @param {Note} note @returns {HTMLElement} */
@@ -80,24 +98,32 @@ const buildNoteCard = (note) => {
   stamp.textContent = formatStamp(note.updatedAt);
   const actions = document.createElement('div');
   actions.className = 'note-actions';
+  const move = createReorderHandle(
+    'note-action note-move',
+    'Переместить заметку',
+    state.notes.length < 2,
+  );
   const open = document.createElement('button');
   open.type = 'button';
-  open.className = 'note-open';
-  open.textContent = 'Открыть';
+  open.className = 'note-action note-open';
+  setNoteAction(open, 'Открыть заметку', '<path d="M6 2H2v4m8-4h4v4M2 10v4h4m8-4v4h-4"/>');
   open.addEventListener('click', () => enterNoteFocus(note.id));
   const copy = document.createElement('button');
   copy.type = 'button';
-  copy.className = 'note-copy';
-  copy.textContent = 'Копировать';
+  copy.className = 'note-action note-copy';
+  setNoteAction(
+    copy,
+    'Копировать заметку',
+    '<rect x="6" y="6" width="8" height="8" rx="1.5"/><path d="M10 6V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h3"/>',
+  );
   copy.disabled = !note.body;
   copy.addEventListener('click', () => void copyNote(note, copy));
   const del = document.createElement('button');
   del.type = 'button';
-  del.className = 'note-delete';
-  del.textContent = '×';
-  del.setAttribute('aria-label', 'Удалить заметку');
+  del.className = 'note-action note-delete';
+  initDeleteButton(del, 'Удалить заметку');
   del.addEventListener('click', () => requestDeleteNote(note.id));
-  actions.append(open, copy, del);
+  actions.append(move, open, copy, del);
   meta.append(stamp, actions);
   card.append(meta);
   return card;
@@ -105,28 +131,9 @@ const buildNoteCard = (note) => {
 
 export const renderNotes = () => {
   notesListEl.replaceChildren();
-  if (!state.notes.length) {
-    const empty = document.createElement('p');
-    empty.className = 'note-empty-text';
-    empty.textContent = 'Для мыслей, ссылок и всего, что нужно держать под рукой.';
-    const add = document.createElement('button');
-    add.className = 'note-empty-add';
-    add.type = 'button';
-    add.textContent = 'Новая заметка';
-    add.addEventListener('click', addNote);
-    notesListEl.append(empty, add);
-  } else {
-    [...state.notes]
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .forEach((note) => notesListEl.append(buildNoteCard(note)));
-  }
+  state.notes.forEach((note) => notesListEl.append(buildNoteCard(note)));
   notesCountEl.textContent = String(state.notes.length);
-  if (state.pendingNoteDeleteId) {
-    const card = notesListEl.querySelector(`.note[data-id="${state.pendingNoteDeleteId}"]`);
-    card?.classList.add('is-confirming');
-    const btn = card?.querySelector('.note-delete');
-    if (btn) btn.textContent = 'Удалить?';
-  }
+  if (state.pendingNoteDeleteId) setDeleteConfirmation(state.pendingNoteDeleteId, true);
 };
 
 export const addNote = () => {
@@ -141,29 +148,41 @@ export const addNote = () => {
 /** @param {string} id */
 export const requestDeleteNote = (id) => {
   if (state.pendingNoteDeleteId === id) {
+    const index = state.notes.findIndex((note) => note.id === id);
     cancelPendingNoteDelete();
     state.notes = state.notes.filter((note) => note.id !== id);
     saveNotes();
     renderNotes();
+    const next = state.notes[Math.min(index, state.notes.length - 1)];
+    const button = notesListEl.querySelector(`.note[data-id="${next?.id}"] .note-preview`);
+    if (button instanceof HTMLButtonElement) button.focus();
+    else addNoteBtn.focus();
     return;
   }
   cancelPendingNoteDelete();
   state.pendingNoteDeleteId = id;
   state.pendingNoteDeleteTimer = setTimeout(cancelPendingNoteDelete, PENDING_DELETE_TIMEOUT_MS);
-  renderNotes();
+  setDeleteConfirmation(id, true);
 };
 
 export const cancelPendingNoteDelete = () => {
   if (state.pendingNoteDeleteTimer) clearTimeout(state.pendingNoteDeleteTimer);
   state.pendingNoteDeleteTimer = null;
-  const card = notesListEl.querySelector(`.note[data-id="${state.pendingNoteDeleteId}"]`);
-  card?.classList.remove('is-confirming');
-  const btn = card?.querySelector('.note-delete');
-  if (btn) btn.textContent = '×';
+  if (state.pendingNoteDeleteId) setDeleteConfirmation(state.pendingNoteDeleteId, false);
   state.pendingNoteDeleteId = null;
 };
 
-export const wireAddNoteButton = () => addNoteBtn.addEventListener('click', addNote);
+export const wireAddNoteButton = () => {
+  addNoteBtn.addEventListener('click', addNote);
+  wireReorder({
+    list: notesListEl,
+    cardSelector: '.note',
+    handleSelector: '.note-move',
+    items: () => state.notes,
+    save: saveNotes,
+    render: renderNotes,
+  });
+};
 
 /** @param {string} id */
 const enterNoteFocus = (id) => {

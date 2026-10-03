@@ -2,14 +2,18 @@
 /** @typedef {import('./types.js').Task} Task */
 /** @typedef {import('./types.js').Timer} Timer */
 /** @typedef {import('./types.js').Note} Note */
+/** @typedef {import('./types.js').HabitsData} HabitsData */
 
 import { state } from './state.js';
+import { normalizeURL } from './utils.js';
 
-const TASKS_KEY = 'todolist-minimal:v2';
+const TASKS_KEY = 'todolist-minimal:v3';
+const TASKS_KEY_PREVIOUS = ['todolist-minimal:v2', 'todolist-minimal:v1'];
 const TIMERS_KEY = 'todolist-minimal:timers:v3';
 // Previous versions, kept so existing timers survive the upgrade.
 const TIMERS_KEY_PREVIOUS = ['todolist-minimal:timers:v2', 'todolist-minimal:timers:v1'];
 const NOTES_KEY = 'todolist-minimal:notes:v1';
+export const HABITS_KEY = 'todolist-minimal:habits:v1';
 
 const isTask =
   /** @param {any} t @returns {t is Task} */
@@ -23,20 +27,46 @@ const isNote =
   /** @param {any} n @returns {n is Note} */
   (n) => n && typeof n.id === 'string' && typeof n.body === 'string';
 
+/** @param {any[]} items @returns {Task[]} */
+const normalizeTasks = (items) =>
+  items.filter(isTask).map((task) => ({
+    id: task.id,
+    text: task.text,
+    completed: !!task.completed,
+    createdAt: Number.isFinite(task.createdAt) ? task.createdAt : Date.now(),
+    ...(Number.isFinite(task.completedAt) ? { completedAt: task.completedAt } : {}),
+    bucket: task.bucket === 'later' && !task.completed ? 'later' : 'today',
+    estimate:
+      task.estimate &&
+      Number.isFinite(task.estimate.min) &&
+      Number.isFinite(task.estimate.max) &&
+      task.estimate.min > 0 &&
+      task.estimate.max >= task.estimate.min
+        ? task.estimate
+        : null,
+    links: Array.isArray(task.links)
+      ? task.links.filter(
+          /** @param {any} link */
+          (link) =>
+            link &&
+            typeof link.label === 'string' &&
+            typeof link.url === 'string' &&
+            normalizeURL(link.url),
+        )
+      : [],
+  }));
+
 /** @returns {Task[]} */
 export const loadTasks = () => {
-  try {
-    const raw = localStorage.getItem(TASKS_KEY);
-    if (!raw) {
-      const old = localStorage.getItem('todolist-minimal:v1');
-      if (old) return JSON.parse(old).filter(isTask);
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(isTask) : [];
-  } catch {
-    return [];
+  for (const key of [TASKS_KEY, ...TASKS_KEY_PREVIOUS]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return normalizeTasks(parsed);
+    } catch {}
   }
+  return [];
 };
 
 export const saveTasks = () => {
@@ -130,5 +160,59 @@ export const loadNotes = () => {
 export const saveNotes = () => {
   try {
     localStorage.setItem(NOTES_KEY, JSON.stringify(state.notes));
+  } catch {}
+};
+
+/** @returns {HabitsData} */
+export const loadHabits = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HABITS_KEY) ?? 'null');
+    if (parsed && Array.isArray(parsed.items)) {
+      const ids = new Set();
+      return {
+        expanded: parsed.expanded !== false,
+        items: parsed.items
+          .filter(
+            /** @param {any} item */
+            (item) => {
+              if (
+                !item ||
+                typeof item.id !== 'string' ||
+                ids.has(item.id) ||
+                typeof item.text !== 'string' ||
+                !item.text.trim()
+              )
+                return false;
+              ids.add(item.id);
+              return true;
+            },
+          )
+          .map(
+            /** @param {any} item */
+            (item) => ({
+              id: item.id,
+              text: item.text.trim(),
+              createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+              completedDates: Array.isArray(item.completedDates)
+                ? [
+                    ...new Set(
+                      item.completedDates.filter(
+                        /** @param {any} date */
+                        (date) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date),
+                      ),
+                    ),
+                  ]
+                : [],
+            }),
+          ),
+      };
+    }
+  } catch {}
+  return { items: [], expanded: true };
+};
+
+export const saveHabits = () => {
+  try {
+    localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
   } catch {}
 };

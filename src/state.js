@@ -3,8 +3,9 @@
 /** @typedef {import('./types.js').Timer} Timer */
 /** @typedef {import('./types.js').Note} Note */
 /** @typedef {import('./types.js').TaskFilter} TaskFilter */
+/** @typedef {import('./types.js').HabitsData} HabitsData */
 
-import { loadTasks, loadTimers, loadNotes } from './storage.js';
+import { loadTasks, loadTimers, loadNotes, loadHabits } from './storage.js';
 
 /**
  * Shared mutable state. Modules import this object and mutate it directly.
@@ -14,6 +15,7 @@ import { loadTasks, loadTimers, loadNotes } from './storage.js';
  *   tasks: Task[],
  *   timers: Timer[],
  *   notes: Note[],
+ *   habits: HabitsData,
  *   filter: TaskFilter,
  *   pendingDeleteId: string | null,
  *   pendingDeleteTimer: ReturnType<typeof setTimeout> | null,
@@ -35,6 +37,7 @@ export const state = {
   tasks: loadTasks(),
   timers: loadTimers(),
   notes: loadNotes(),
+  habits: loadHabits(),
   filter: 'all',
   pendingDeleteId: null,
   pendingDeleteTimer: null,

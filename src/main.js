@@ -6,23 +6,27 @@ import { dateEl } from './dom.js';
 import { renderTasks } from './tasks.js';
 import { addTimer, renderTimers, tickOnBoot, startTick } from './timers.js';
 import { setupEventListeners } from './events.js';
-import { ensureNotificationPermission } from './notifications.js';
+import { saveTasks } from './storage.js';
 import { renderNotes, wireAddNoteButton } from './notes.js';
+import { renderHabits, wireHabits, refreshHabitDay } from './habits.js';
 
 const renderDateLabel = () => {
   const now = new Date();
   dateEl.textContent = `${formatDate(now)} · ${formatTime(now, true)}`;
+  refreshHabitDay();
 };
 
 const boot = () => {
   // Seed a default timer on first run so the workspace is never empty.
   if (state.timers.length === 0) addTimer();
 
-  ensureNotificationPermission();
+  saveTasks();
   setupEventListeners();
   renderTasks();
   renderTimers();
   renderNotes();
+  renderHabits();
+  wireHabits();
   wireAddNoteButton();
   tickOnBoot();
   startTick();

@@ -4,63 +4,75 @@
 
 English | [Русский](README-ru.md)
 
-desk is a personal desktop workspace: a todolist and a stack of Pomodoro timers in one quiet, dark-themed page. Tasks and timers persist in localStorage. No build step, no telemetry, no network calls. Open the page, type, work.
+desk keeps tasks, timers, and notes on one dark page. Everything persists in localStorage. There is no build step or account. The app's only external request loads Google Fonts.
 
-The layout is a three-column grid: timers on the left, tasks in the center, an empty slot on the right reserved for whatever comes next.
+The layout has three columns: timers, tasks, and notes with habits. On desktop, the workspace fits one screen and long lists scroll inside their columns. On phones the columns stack, with tasks first.
 
 ## Tasks
 
-A minimal list with the operations that matter and nothing else.
+- **Enter** appends a task. **Ctrl/Cmd + Enter** and **Shift + Enter** prepend it.
+- **Checkbox** completes a task and moves it to the bottom. The all-view shows the first three completed tasks, with a button to reveal the rest.
+- **Double-click**, **⋯**, or the time estimate opens an editor for the task name, estimate, and attached links. Save applies changes, Esc cancels.
+- **The clock button** opens an estimate field for minutes, hours, and ranges: `30 мин`, `1–2 ч`, `30 мин – 1 ч`. «Готово» or Enter applies the estimate.
+- **The link button** opens a URL and optional name. «Прикрепить» or Enter attaches it to the draft. Add multiple links or remove any before creating the task. Links appear above the name. Pasting a URL over a fully selected name attaches it while preserving the name.
+- **Когда** in the **⋯** editor selects «Сегодня» or «На потом». New tasks created in the deferred view are deferred immediately.
+- **Drag** reorders tasks with a mouse.
+- **×** requests deletion confirmation. Click again within three seconds to delete.
+- **Очистить завершённые** removes completed tasks with an Undo toast.
+- **Filters**: Все / Активные / Завершённые / На потом.
 
-- **Enter** adds a task to the bottom of the active section. Typing anywhere on the page focuses the input — no clicks needed.
-- **Click** the checkbox to complete. Completed tasks move to the bottom and get a strikethrough.
-- **Double-click** a task to rename. Enter saves, Esc cancels.
-- **Drag** the handle (visible on hover) to reorder.
-- **Hover** to see the position badge and the × delete button. Click × once for "Удалить?", twice within three seconds to confirm.
-- **"Очистить завершённые"** in the footer removes every completed task with an Undo toast.
-- **Filters**: Все / Активные / Завершённые — click a tab to switch; counters stay accurate.
+**Cmd/Ctrl + K** focuses the task input. Typing outside editors and dialogs also focuses it. **Esc** clears the input.
 
-**Cmd/Ctrl + K** focuses the task input from anywhere. **Esc** clears the input.
+## Daily habits
+
+A collapsible section below the notes in the right column holds daily habits. Enter a name and press Enter to add one. The habit day starts at 09:00 in Omsk (Asia/Omsk), regardless of the device timezone. Checkmarks remain through the night and reset at 09:00. Habit names and completion history remain saved. Habit counts are separate from task progress.
+
+The pencil button renames a habit inline. Enter saves, Esc cancels. Deletion offers Undo. Habits, completion dates, and the section's expanded state persist across reloads.
 
 ## Timers
 
-A Pomodoro is one work phase followed by one break phase. desk ships with one default timer (52 min / 17 min) and lets you add as many more as you need. Each timer runs independently.
+A default Pomodoro uses 52 minutes of work and a 17-minute break. Click "Новый таймер" for an 8-hour single-phase timer, or Shift + click for another Pomodoro. Timers are independent and start manually.
 
 - **↺** resets the current phase to full duration.
-- **⏸** pauses; **▶** resumes.
-- **"→ перерыв" / "→ работа"** switches phase manually. The timer does **not** auto-transition — when the countdown hits zero, it stops in an `expired` state and asks you what to do.
-- **Click "52 мин работа" / "17 мин перерыв"** to change either duration (1–240 minutes).
-- **Double-click** the timer name to rename.
-- **Click ×** once for "удалить?", twice within three seconds to confirm.
+- **Pause / start** controls the countdown.
+- **Работа / перерыв** switches phases manually. At zero, the timer stops in an `expired` state and waits for the user's next action.
+- **Click a single-phase timer's time** to set its full duration using `MM:SS` or `H:MM:SS`, from one second to 24 hours. Editing pauses the countdown. Enter saves the new duration for starting and resetting, Esc cancels.
+- **Pomodoro durations** appear below the countdown and accept minutes or `H:MM`. Clicking the time while paused changes the current phase's remaining time.
+- **Double-click** the name to rename. The expand button opens a full-screen view.
+- **×** deletes a timer after a second click within three seconds.
 
-When a phase ends, three notifications fire so the change is hard to miss: a beep (Web Audio, distinct ascending tone for work end, descending for break end), a native browser notification (permission requested on first use), and an in-app toast with the phase-switch button pre-attached. The card border turns accent, the time text turns accent, the phase label pulses, and "→ перерыв" / "→ работа" becomes the obvious next click.
+When a phase ends, a beep, browser notification, and toast indicate completion. Notification permission is requested on the first timer start. The card and time change color. A Pomodoro toast offers the other phase.
 
-Timers persist via timestamps. Closing the tab and reopening an hour later catches the missed phase and fires the notification once for the most relevant timer.
+Timers persist via timestamps. Reopening the page marks missed phases expired and notifies once for the first affected timer.
+
+## Notes
+
+The right column shows short previews. Click a preview or "Открыть" to open a full-screen editor. Edits save automatically, and closing the editor immediately saves pending changes. Copy is available in both the card and editor. URLs found in the text appear as links below the editor.
 
 ## Storage
 
-Two localStorage keys, plain JSON:
+Four localStorage keys, plain JSON:
 
-- `todolist-minimal:v2` — tasks
-- `todolist-minimal:timers:v2` — timers
+- `todolist-minimal:v3`: tasks, estimates, links, and list membership
+- `todolist-minimal:timers:v3`: timers
+- `todolist-minimal:notes:v1`: notes
+- `todolist-minimal:habits:v1`: habits, completion dates, and expanded state
 
-Clearing site data clears the workspace. There is no export, no backup, no sync.
+Older task and timer versions migrate automatically. Clearing site data clears the workspace. Export, backups, and synchronization between devices are not implemented. Follow-up ideas are recorded in [IDEAS.md](IDEAS.md).
 
 ## Setup
 
-The project is a small set of static files plus a Node dev toolchain for linting and type checking. Open it locally with any static HTTP server; run `npm ci` once to install the dev dependencies if you want to run the checks.
+Serve the static files through a local HTTP server. `npm ci` installs the development tools for code checks.
 
 ```bash
 # Python
 python3 -m http.server 8080 --directory "$HOME/code/desk"
 
-# Or just open the file
-xdg-open "$HOME/code/desk/index.html"
 ```
 
 ## Development
 
-Requires Node.js ≥ 20 for the lint and typecheck toolchain. The site itself has no build step and no runtime dependencies — `src/` is loaded directly by the browser via native ES modules.
+The code checks require Node.js. The browser loads `src/` directly through native ES modules.
 
 ```bash
 npm ci                # install dev tools (eslint, prettier, stylelint, typescript, impeccable)
@@ -76,10 +88,10 @@ GitHub Actions runs `npm run ci` on every push to `main` and on pull requests.
 
 ## Customization
 
-- **Durations**: click "52 мин работа" or "17 мин перерыв" on any timer card.
-- **Colors**: every color is a CSS variable at the top of `style.css` (`:root { ... }`). `--accent` is the work color, `--break` is the break color, `--danger` is delete.
-- **Fonts**: `style.css` loads Inter and JetBrains Mono from Google Fonts. Remove the `<link>` in `index.html` to drop the network call entirely.
-- **Layout**: the three-column grid lives in `.app` in `style.css`. Change `grid-template-columns` to widen a column or hide one.
+- **Durations**: click a single-phase timer's time, or "52 мин работа" and "17 мин перерыв" on a Pomodoro card.
+- **Colors**: CSS variables at the top of `style.css`. `--accent` controls work, `--break` controls breaks, and `--danger` controls deletion.
+- **Fonts**: Manrope and JetBrains Mono load through links in `index.html`. Remove the Google Fonts links to use local fallback fonts.
+- **Layout**: the three-column grid lives in `.app`, with responsive rules near the end of `style.css`.
 
 ## Files
 
@@ -96,11 +108,14 @@ desk/
 │   ├── toast.js                # Toast UI
 │   ├── audio.js                # Web Audio beep
 │   ├── notifications.js        # Native notifications
-│   ├── tasks.js                # Task CRUD, render, inline edit
+│   ├── tasks.js                # Task CRUD, rendering, deferral
+│   ├── task-editor.js          # Task name, estimate, and link editor
+│   ├── habits.js               # Daily habits and completion dates
+│   ├── notes.js                # Note previews and full-screen editor
 │   ├── timers.js               # Timer CRUD, render, tick, edit
 │   ├── dragdrop.js             # Task drag-and-drop
 │   ├── events.js               # Global event wiring
-│   └── types.js                # JSDoc typedefs for Task / Timer
+│   └── types.js                # JSDoc typedefs for tasks, timers, notes, and habits
 ├── package.json                # Dev scripts and toolchain deps
 ├── eslint.config.js            # ESLint flat config
 ├── .prettierrc.json            # Prettier config

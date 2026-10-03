@@ -2,12 +2,15 @@
 /** @typedef {import('./types.js').Timer} Timer */
 
 const NOTIFICATION_CLOSE_MS = 12_000;
+let permissionRequested = false;
 
 /** @returns {Promise<boolean>} */
 export const ensureNotificationPermission = () => {
   if (!('Notification' in window)) return Promise.resolve(false);
   if (Notification.permission === 'granted') return Promise.resolve(true);
   if (Notification.permission === 'denied') return Promise.resolve(false);
+  if (permissionRequested) return Promise.resolve(false);
+  permissionRequested = true;
   try {
     return Notification.requestPermission()
       .then((p) => p === 'granted')
@@ -30,7 +33,7 @@ export const fireBrowserNotification = (timer) => {
   const nextPhase = timer.phase === 'work' ? 'перерыв' : 'работа';
   try {
     const n = new Notification(
-      `${wasPhase.charAt(0).toUpperCase() + wasPhase.slice(1)} завершена`,
+      `${wasPhase.charAt(0).toUpperCase() + wasPhase.slice(1)} ${timer.phase === 'work' ? 'завершена' : 'завершён'}`,
       {
         body: isSinglePhase ? 'Время вышло.' : `Переключиться на ${nextPhase}?`,
         tag: `pomodoro-${timer.id}`,

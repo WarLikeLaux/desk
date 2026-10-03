@@ -92,12 +92,12 @@ export const pluralize = (n, forms) => {
   return forms[2];
 };
 
-/** Format a countdown: "25:00" below an hour, "8:00:00" from an hour up. @param {number} secs */
-export const formatMMSS = (secs) => {
+/** Format a countdown. @param {number} secs @param {boolean} [withHours] */
+export const formatMMSS = (secs, withHours = secs >= 3600) => {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.max(0, secs % 60);
-  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  if (withHours) return `${pad(h)}:${pad(m)}:${pad(s)}`;
   return `${pad(m)}:${pad(s)}`;
 };
 
@@ -145,4 +145,74 @@ export const renderTextWithLinks = (text, doc) => {
   }
   if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
   return frag;
+};
+
+/** @param {string} value @returns {string | null} */
+export const normalizeURL = (value) => {
+  const raw = value.trim();
+  if (!raw || /\s/.test(raw)) return null;
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname.includes('.')) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+};
+
+/** @param {string} value @returns {{min: number, max: number} | null} */
+export const parseEstimate = (value) => {
+  const raw = value.trim().toLowerCase().replaceAll(',', '.');
+  if (!raw) return null;
+  const parts = raw.split(/\s*[-–—]\s*/);
+  if (parts.length > 2) return null;
+  const inferredHours = parts.length === 2 && /^\d+(?:\.\d+)?\s*ч(?:ас(?:а|ов)?)?$/.test(parts[1]);
+  /** @param {string} part @param {boolean} hours */
+  const parsePart = (part, hours) => {
+    const match =
+      /^(?:(\d+(?:\.\d+)?)\s*ч(?:ас(?:а|ов)?)?\s*)?(?:(\d+(?:\.\d+)?)\s*(?:мин(?:ут(?:а|ы)?)?)?)?$/.exec(
+        part.trim(),
+      );
+    if (!match || (!match[1] && !match[2])) return null;
+    const minutes =
+      Number(match[1] ?? 0) * 60 +
+      Number(match[2] ?? 0) * (hours && /^\d+(?:\.\d+)?$/.test(part.trim()) ? 60 : 1);
+    return minutes >= 1 && minutes <= 10080 ? Math.round(minutes) : null;
+  };
+  const min = parsePart(parts[0], inferredHours);
+  const max = parts.length === 2 ? parsePart(parts[1], false) : min;
+  return min !== null && max !== null && max >= min ? { min, max } : null;
+};
+
+/** @param {{min: number, max: number} | null} estimate */
+export const formatEstimate = (estimate) => {
+  if (!estimate) return '';
+  const { min, max } = estimate;
+  if (min === max) return formatDuration(min * 60);
+  if (min % 60 === 0 && max % 60 === 0) return `${min / 60}–${max / 60} ч`;
+  if (max < 60) return `${min}–${max} мин`;
+  return `${formatDuration(min * 60)} – ${formatDuration(max * 60)}`;
+};
+
+/** @param {string} text @returns {Promise<boolean>} */
+export const copyText = async (text) => {
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      return document.execCommand('copy');
+    } catch {
+      return false;
+    } finally {
+      ta.remove();
+    }
+  }
 };

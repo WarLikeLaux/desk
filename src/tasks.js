@@ -4,7 +4,7 @@
 
 import { state } from './state.js';
 import { saveTasks } from './storage.js';
-import { pluralize, generateId, renderTextWithLinks } from './utils.js';
+import { pluralize, generateId, renderTextWithLinks, formatEstimate, copyText } from './utils.js';
 import { showToast } from './toast.js';
 import {
   $,
@@ -25,20 +25,27 @@ const PENDING_DELETE_TIMEOUT_MS = 3000;
 const COMPLETED_COLLAPSE_MAX = 3;
 
 /** @returns {Task[]} */
+const currentTasks = () =>
+  state.tasks.filter((task) =>
+    state.filter === 'later' ? task.bucket === 'later' : task.bucket === 'today',
+  );
+
+/** @returns {Task[]} */
 export const visibleTasks = () => {
-  if (state.filter === 'active') return state.tasks.filter((t) => !t.completed);
-  if (state.filter === 'completed') return state.tasks.filter((t) => t.completed);
-  if (state.showAllCompleted) return state.tasks;
-  const completed = state.tasks.filter((t) => t.completed);
-  if (completed.length <= COMPLETED_COLLAPSE_MAX) return state.tasks;
+  const tasks = currentTasks();
+  if (state.filter === 'active') return tasks.filter((t) => !t.completed);
+  if (state.filter === 'completed') return tasks.filter((t) => t.completed);
+  if (state.filter === 'later' || state.showAllCompleted) return tasks;
+  const completed = tasks.filter((t) => t.completed);
+  if (completed.length <= COMPLETED_COLLAPSE_MAX) return tasks;
   const visibleCompleted = new Set(completed.slice(0, COMPLETED_COLLAPSE_MAX).map((t) => t.id));
-  return state.tasks.filter((t) => !t.completed || visibleCompleted.has(t.id));
+  return tasks.filter((t) => !t.completed || visibleCompleted.has(t.id));
 };
 
-/** @returns {number} count of completed tasks hidden in the all-view */
+/** @returns {number} */
 export const hiddenCompletedCount = () => {
   if (state.filter !== 'all' || state.showAllCompleted) return 0;
-  return state.tasks.filter((t) => t.completed).length - COMPLETED_COLLAPSE_MAX;
+  return Math.max(0, currentTasks().filter((t) => t.completed).length - COMPLETED_COLLAPSE_MAX);
 };
 
 export const toggleShowAllCompleted = () => {
@@ -49,7 +56,12 @@ export const toggleShowAllCompleted = () => {
 /** Build a plain-text dump of the tasks currently visible in the active filter. */
 export const visibleTasksAsText = () =>
   visibleTasks()
-    .map((t) => t.text)
+    .map((t) =>
+      [
+        t.text + (t.estimate ? ` (${formatEstimate(t.estimate)})` : ''),
+        ...t.links.map((link) => `${link.label}: ${link.url}`),
+      ].join('\n'),
+    )
     .join('\n');
 
 /**
@@ -57,24 +69,7 @@ export const visibleTasksAsText = () =>
  * path when navigator.clipboard is unavailable (insecure context, old Safari).
  * @returns {Promise<boolean>} true on success.
  */
-export const copyVisibleTasks = async () => {
-  const text = visibleTasksAsText();
-  if (!text) return false;
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  }
-};
+export const copyVisibleTasks = () => copyText(visibleTasksAsText());
 
 /**
  * Move a task into the correct section based on its completed flag.
@@ -96,8 +91,10 @@ const placeTaskInOrder = (task) => {
 /**
  * @param {string} text
  * @param {boolean} [prepend=false] When true, insert at the very top of the list.
+ * @param {Task['estimate']} [estimate]
+ * @param {Task['links']} [links]
  */
-export const addTask = (text, prepend = false) => {
+export const addTask = (text, prepend = false, estimate = null, links = []) => {
   const clean = text.trim();
   if (!clean) return;
   const task = {
@@ -105,6 +102,9 @@ export const addTask = (text, prepend = false) => {
     text: clean,
     completed: false,
     createdAt: Date.now(),
+    bucket: /** @type {'today' | 'later'} */ (state.filter === 'later' ? 'later' : 'today'),
+    estimate,
+    links,
   };
   if (prepend) {
     state.tasks.unshift(task);
@@ -123,8 +123,10 @@ export const toggleTask = (id) => {
   const t = state.tasks.find((x) => x.id === id);
   if (!t) return;
   t.completed = !t.completed;
-  if (t.completed) t.completedAt = Date.now();
-  else delete t.completedAt;
+  if (t.completed) {
+    t.completedAt = Date.now();
+    t.bucket = 'today';
+  } else delete t.completedAt;
   placeTaskInOrder(t);
   state.lastAnimatedIds.add(id);
   saveTasks();
@@ -193,12 +195,8 @@ export const clearCompleted = () => {
   );
 };
 
-/**
- * @param {Task} task
- * @param {number} index
- * @returns {HTMLElement}
- */
-const buildTaskEl = (task, index) => {
+/** @param {Task} task @returns {HTMLElement} */
+const buildTaskEl = (task) => {
   const li = document.createElement('li');
   li.className = `task${task.completed ? ' is-done' : ''}`;
   li.draggable = true;
@@ -207,16 +205,12 @@ const buildTaskEl = (task, index) => {
     li.classList.add('is-new');
     state.lastAnimatedIds.delete(task.id);
   }
-
-  const dragHandle = document.createElement('span');
-  dragHandle.className = 'handle';
-  dragHandle.setAttribute('aria-label', 'Перетащить');
-  dragHandle.innerHTML = `
-    <span class="handle-dot"><span></span><span></span></span>
-    <span class="handle-dot"><span></span><span></span></span>
-    <span class="handle-dot"><span></span><span></span></span>
-  `;
-  li.appendChild(dragHandle);
+  const handle = document.createElement('span');
+  handle.className = 'handle';
+  handle.setAttribute('aria-hidden', 'true');
+  handle.innerHTML =
+    '<svg viewBox="0 0 16 20" width="16" height="20" fill="currentColor"><circle cx="5" cy="5" r="1"/><circle cx="11" cy="5" r="1"/><circle cx="5" cy="10" r="1"/><circle cx="11" cy="10" r="1"/><circle cx="5" cy="15" r="1"/><circle cx="11" cy="15" r="1"/></svg>';
+  li.appendChild(handle);
 
   const check = document.createElement('button');
   check.className = `check${task.completed ? ' is-checked' : ''}`;
@@ -225,31 +219,61 @@ const buildTaskEl = (task, index) => {
     'aria-label',
     task.completed ? 'Отметить как невыполненную' : 'Отметить как выполненную',
   );
-  check.innerHTML = `
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 8.5l3.2 3.2L13 5"/>
-    </svg>
-  `;
+  check.setAttribute('aria-pressed', String(task.completed));
+  check.innerHTML =
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
   li.appendChild(check);
 
+  const content = document.createElement('div');
+  content.className = 'task-content';
+  if (task.links.length) {
+    const links = document.createElement('div');
+    links.className = 'task-links';
+    for (const link of task.links) {
+      const a = document.createElement('a');
+      a.className = 'task-link';
+      a.href = link.url;
+      a.textContent = link.label;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      links.append(a);
+    }
+    content.append(links);
+  }
   const text = document.createElement('span');
   text.className = 'task-text';
+  text.title = task.text;
   text.appendChild(renderTextWithLinks(task.text, document));
-  text.title = 'Двойной клик — редактировать';
-  li.appendChild(text);
+  content.appendChild(text);
+  li.appendChild(content);
 
-  const id = document.createElement('span');
-  id.className = 'task-id';
-  id.textContent = String(index + 1).padStart(2, '0');
-  li.appendChild(id);
+  const estimate = document.createElement('button');
+  estimate.className = 'task-estimate task-edit-button';
+  estimate.type = 'button';
+  estimate.textContent = formatEstimate(task.estimate);
+  estimate.hidden = !task.estimate;
+  estimate.setAttribute(
+    'aria-label',
+    `Оценка времени для «${task.text}»: ${formatEstimate(task.estimate) || 'не указана'}. Изменить`,
+  );
+  li.append(estimate);
 
+  const actions = document.createElement('div');
+  actions.className = 'task-actions';
+  const edit = document.createElement('button');
+  edit.className = 'task-edit-button task-menu';
+  edit.type = 'button';
+  edit.innerHTML =
+    '<svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg>';
+  edit.setAttribute('aria-label', `Изменить задачу «${task.text}»`);
+  actions.append(edit);
   const del = document.createElement('button');
   del.className = 'delete';
   del.type = 'button';
-  del.setAttribute('aria-label', 'Удалить');
+  del.setAttribute('aria-label', `Удалить задачу «${task.text}»`);
   del.textContent = '×';
-  li.appendChild(del);
-
+  actions.append(del);
+  li.append(actions);
   return li;
 };
 
@@ -260,7 +284,7 @@ export const renderTasks = () => {
 
   const visible = visibleTasks();
   taskList.innerHTML = '';
-  visible.forEach((task, i) => taskList.appendChild(buildTaskEl(task, i)));
+  visible.forEach((task) => taskList.appendChild(buildTaskEl(task)));
 
   const hidden = hiddenCompletedCount();
   if (hidden > 0) {
@@ -268,13 +292,17 @@ export const renderTasks = () => {
     toggle.type = 'button';
     toggle.className = 'task-show-all';
     toggle.textContent = `Показать ещё ${hidden} ${pluralize(hidden, ['завершённую', 'завершённые', 'завершённых'])}`;
-    taskList.appendChild(toggle);
+    const row = document.createElement('li');
+    row.append(toggle);
+    taskList.append(row);
   } else if (state.filter === 'all' && state.showAllCompleted) {
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'task-show-all';
     toggle.textContent = 'Скрыть завершённые';
-    taskList.appendChild(toggle);
+    const row = document.createElement('li');
+    row.append(toggle);
+    taskList.append(row);
   }
 
   if (state.pendingDeleteId) {
@@ -289,98 +317,46 @@ export const renderTasks = () => {
     }
   }
 
-  const isEmpty = visible.length === 0;
-  emptyState.hidden = !isEmpty;
-  if (isEmpty) {
-    if (state.tasks.length === 0) {
-      emptyTitle.textContent = 'Список пуст';
-      emptyHint.textContent = 'Введите первую задачу и нажмите Enter';
-    } else if (state.filter === 'active') {
-      emptyTitle.textContent = 'Все задачи завершены';
-      emptyHint.textContent = 'Хорошая работа. Можно выдохнуть.';
-    } else if (state.filter === 'completed') {
-      emptyTitle.textContent = 'Нет завершённых';
-      emptyHint.textContent = 'Отмечайте задачи чекбоксом, чтобы видеть их здесь';
-    }
-  }
-
-  if (state.tasks.length === 0) {
-    subtitleEl.textContent = 'Список текущих задач';
+  const today = state.tasks.filter((t) => t.bucket === 'today');
+  const activeCount = today.filter((t) => !t.completed).length;
+  const completedCount = today.filter((t) => t.completed).length;
+  const laterCount = state.tasks.filter((t) => t.bucket === 'later').length;
+  const isLater = state.filter === 'later';
+  const active = isLater ? laterCount : activeCount;
+  emptyState.hidden = visible.length !== 0;
+  if (isLater) {
+    emptyTitle.textContent = 'Пока ничего отложенного';
+    emptyHint.textContent = 'Добавьте задачу здесь или выберите «На потом» в редакторе ⋯';
+  } else if (state.filter === 'completed') {
+    emptyTitle.textContent = 'Нет завершённых';
+    emptyHint.textContent = 'Отмечайте выполненные задачи чекбоксом';
+  } else if (activeCount === 0 && completedCount > 0) {
+    emptyTitle.textContent = 'Все задачи завершены';
+    emptyHint.textContent = 'Можно выдохнуть или добавить новую задачу';
   } else {
-    const active = state.tasks.filter((t) => !t.completed).length;
-    subtitleEl.textContent =
-      active === 0
-        ? 'Все задачи на сегодня закрыты'
-        : `${active} ${pluralize(active, ['задача', 'задачи', 'задач'])} в работе`;
+    emptyTitle.textContent = 'Список пуст';
+    emptyHint.textContent = 'Введите первую задачу и нажмите Enter';
   }
-
-  const activeCount = state.tasks.filter((t) => !t.completed).length;
-  const completedCount = state.tasks.filter((t) => t.completed).length;
-  remaining.textContent = `${activeCount} ${pluralize(activeCount, ['осталась', 'осталось', 'осталось'])}`;
-
-  clearBtn.hidden = completedCount === 0;
+  subtitleEl.textContent = isLater
+    ? `${laterCount} ${pluralize(laterCount, ['задача отложена', 'задачи отложены', 'задач отложено'])}`
+    : activeCount === 0
+      ? 'Сегодня можно выдохнуть'
+      : `${activeCount} ${pluralize(activeCount, ['задача', 'задачи', 'задач'])} в работе`;
+  const title = document.querySelector('.title');
+  if (title) title.textContent = isLater ? 'На потом' : 'Сегодня';
+  remaining.textContent = `${active} ${pluralize(active, ['осталась', 'осталось', 'осталось'])}`;
+  clearBtn.hidden = completedCount === 0 || isLater;
   clearCount.textContent = String(completedCount);
-
   progressDone.textContent = String(completedCount);
-  progressTotal.textContent = String(state.tasks.length);
-
+  progressTotal.textContent = String(today.length);
   document.querySelectorAll('[data-count]').forEach((el) => {
     if (!(el instanceof HTMLElement)) return;
     const f = el.dataset.count;
-    if (f === 'all') el.textContent = String(state.tasks.length);
+    if (f === 'all') el.textContent = String(today.length);
     if (f === 'active') el.textContent = String(activeCount);
     if (f === 'completed') el.textContent = String(completedCount);
+    if (f === 'later') el.textContent = String(laterCount);
   });
-};
-
-/** @param {HTMLElement} li */
-export const startTaskEdit = (li) => {
-  if (li.querySelector('.task-edit')) return;
-  const text = li.querySelector('.task-text');
-  if (!text) return;
-  const id = li.dataset.id;
-  const task = state.tasks.find((t) => t.id === id);
-  if (!task) return;
-  const originalText = task.text;
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'task-edit';
-  input.value = originalText;
-  input.spellcheck = false;
-  input.setAttribute('aria-label', 'Редактировать задачу');
-
-  text.replaceWith(input);
-  input.focus();
-  input.select();
-
-  let done = false;
-  /** @param {boolean} save */
-  const finish = (save) => {
-    if (done) return;
-    done = true;
-    const next = save ? input.value.trim() : originalText;
-    if (save && next && next !== originalText) {
-      task.text = next;
-      saveTasks();
-    }
-    const restored = document.createElement('span');
-    restored.className = 'task-text';
-    restored.textContent = next || originalText;
-    restored.title = 'Двойной клик — редактировать';
-    if (input.parentNode) input.replaceWith(restored);
-  };
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      finish(true);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      finish(false);
-    }
-  });
-  input.addEventListener('blur', () => finish(true));
 };
 
 /** Set the active filter and re-render. @param {TaskFilter} f */
@@ -390,6 +366,10 @@ export const setFilter = (f) => {
   document.querySelectorAll('.filter').forEach((el) => el.classList.remove('is-active'));
   const active = /** @type {HTMLElement | null} */ ($(`[data-filter="${f}"]`));
   if (active) active.classList.add('is-active');
+  document
+    .querySelectorAll('.filter')
+    .forEach((el) => el.setAttribute('aria-pressed', String(el === active)));
+  taskList.scrollTop = 0;
   cancelPendingTaskDelete();
   renderTasks();
 };

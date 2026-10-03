@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   check:
-    name: lint + typecheck
+    name: lint + typecheck + design
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,14 +25,5 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Format check
-        run: npm run format:check
-
-      - name: Lint (JS)
-        run: npm run lint
-
-      - name: Lint (CSS)
-        run: npm run lint:css
-
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Check
+        run: npm run ci

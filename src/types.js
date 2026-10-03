@@ -5,7 +5,24 @@
  * @property {string} text
  * @property {boolean} completed
  * @property {number} createdAt
+ * @property {'today' | 'later'} bucket
+ * @property {{min: number, max: number} | null} estimate Minutes
+ * @property {{label: string, url: string}[]} links
  * @property {number} [completedAt]
+ */
+
+/**
+ * @typedef {Object} Habit
+ * @property {string} id
+ * @property {string} text
+ * @property {number} createdAt
+ * @property {string[]} completedDates Omsk habit-day dates, YYYY-MM-DD, starting at 09:00
+ */
+
+/**
+ * @typedef {Object} HabitsData
+ * @property {Habit[]} items
+ * @property {boolean} expanded
  */
 
 /**
@@ -35,7 +52,7 @@
  */
 
 /**
- * @typedef {'all' | 'active' | 'completed'} TaskFilter
+ * @typedef {'all' | 'active' | 'completed' | 'later'} TaskFilter
  */
 
 /**

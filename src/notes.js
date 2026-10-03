@@ -3,338 +3,241 @@
 
 import { state } from './state.js';
 import { saveNotes } from './storage.js';
-import { generateId } from './utils.js';
+import { generateId, copyText, normalizeURL } from './utils.js';
+import { showToast } from './toast.js';
 import { notesListEl, notesCountEl, addNoteBtn, noteFocusOverlay } from './dom.js';
 
 const SAVE_DEBOUNCE_MS = 250;
 const PENDING_DELETE_TIMEOUT_MS = 3000;
-
-// A loose URL extractor used to show a preview row under each note.
 const NOTE_URL_RE = /\b((?:https?:\/\/)?(?:[\w-]+\.[\w-]{2,})[^\s<]*)/gi;
+let saveTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
+let returnFocusId = /** @type {string | null} */ (null);
 
-/** @param {string} text @returns {string[]} */
-const extractLinks = (text) => {
-  const out = /** @type {string[]} */ ([]);
-  for (const m of text.matchAll(NOTE_URL_RE)) out.push(m[1]);
-  return out;
+const flushNotes = () => {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saveNotes();
 };
 
-/**
- * Fill a note's link row with the URLs found in its body. Hides the row when
- * there are none.
- * @param {HTMLElement} container
- * @param {string} text
- */
+/** @param {HTMLElement} container @param {string} text */
 const fillLinks = (container, text) => {
-  container.innerHTML = '';
-  const found = extractLinks(text);
-  if (found.length === 0) {
-    container.hidden = true;
-    return;
-  }
-  container.hidden = false;
-  const label = document.createElement('span');
-  label.className = 'note-links-label';
-  label.textContent = 'ссылки';
-  container.appendChild(label);
-  const list = document.createElement('span');
-  list.className = 'note-links-list';
-  for (const raw of found) {
+  container.replaceChildren();
+  const urls = new Set(
+    [...text.matchAll(NOTE_URL_RE)]
+      .map((match) => normalizeURL(match[1]))
+      .filter((url) => url !== null),
+  );
+  container.hidden = urls.size === 0;
+  for (const url of urls) {
     const a = document.createElement('a');
-    a.href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    a.textContent = raw;
+    a.href = url;
+    a.textContent = new URL(url).hostname;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     a.className = 'task-link';
-    list.appendChild(a);
+    container.append(a);
   }
-  container.appendChild(list);
 };
-
-/** @returns {Note} */
-const createNote = () => ({
-  id: generateId('n'),
-  body: '',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-});
 
 /** @param {number} ms */
 const formatStamp = (ms) => {
-  const d = new Date(ms);
-  const today = new Date();
-  const isToday = d.toDateString() === today.toDateString();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  if (isToday) return `сегодня ${hh}:${mm}`;
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  return `${dd}.${mo} ${hh}:${mm}`;
+  const date = new Date(ms);
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return date.toDateString() === new Date().toDateString()
+    ? `сегодня ${time}`
+    : `${date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} ${time}`;
 };
 
-/**
- * @param {Note} note
- * @returns {HTMLElement}
- */
+/** @param {Note} note @param {HTMLButtonElement} button */
+const copyNote = async (note, button) => {
+  const ok = await copyText(note.body);
+  button.textContent = ok ? 'Скопировано' : 'Не скопировано';
+  setTimeout(() => {
+    button.textContent = 'Копировать';
+  }, 2000);
+  if (!noteFocusOverlay.open)
+    showToast(ok ? 'Заметка скопирована' : 'Не удалось скопировать заметку', null, 'Закрыть');
+};
+
+/** @param {Note} note @returns {HTMLElement} */
 const buildNoteCard = (note) => {
   const card = document.createElement('div');
   card.className = 'note';
   card.dataset.id = note.id;
-  if (state.lastAnimatedNoteIds?.has(note.id)) {
-    card.classList.add('is-new');
-    state.lastAnimatedNoteIds.delete(note.id);
-  }
-
-  const ta = document.createElement('textarea');
-  ta.className = 'note-body';
-  ta.value = note.body;
-  ta.placeholder = 'Заметка...';
-  ta.spellcheck = false;
-  ta.rows = 3;
-  ta.setAttribute('aria-label', 'Текст заметки');
-  card.appendChild(ta);
-
-  const links = document.createElement('div');
-  links.className = 'note-links';
-  links.hidden = true;
-  card.appendChild(links);
-
-  const refreshLinks = () => fillLinks(links, note.body);
-  refreshLinks();
-
-  const expand = document.createElement('button');
-  expand.className = 'note-expand';
-  expand.type = 'button';
-  expand.setAttribute('aria-label', 'Развернуть заметку');
-  expand.title = 'Развернуть';
-  expand.textContent = '⛶';
+  const preview = document.createElement('button');
+  preview.type = 'button';
+  preview.className = 'note-preview';
+  preview.textContent = note.body || 'Пустая заметка';
+  preview.setAttribute('aria-label', `Открыть заметку: ${note.body.slice(0, 80) || 'пустая'}`);
+  preview.addEventListener('click', () => enterNoteFocus(note.id));
+  card.append(preview);
 
   const meta = document.createElement('div');
   meta.className = 'note-meta';
-
   const stamp = document.createElement('span');
   stamp.className = 'note-stamp';
-  stamp.textContent = formatStamp(note.updatedAt || note.createdAt);
-
-  const actions = document.createElement('span');
+  stamp.textContent = formatStamp(note.updatedAt);
+  const actions = document.createElement('div');
   actions.className = 'note-actions';
-  actions.append(expand);
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'note-open';
+  open.textContent = 'Открыть';
+  open.addEventListener('click', () => enterNoteFocus(note.id));
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'note-copy';
+  copy.textContent = 'Копировать';
+  copy.disabled = !note.body;
+  copy.addEventListener('click', () => void copyNote(note, copy));
   const del = document.createElement('button');
-  del.className = 'note-delete';
   del.type = 'button';
-  del.textContent = 'удалить';
+  del.className = 'note-delete';
+  del.textContent = '×';
   del.setAttribute('aria-label', 'Удалить заметку');
-  actions.append(del);
+  del.addEventListener('click', () => requestDeleteNote(note.id));
+  actions.append(open, copy, del);
   meta.append(stamp, actions);
-  card.appendChild(meta);
-
-  expand.addEventListener('click', () => {
-    enterNoteFocus(/** @type {string} */ (note.id));
-  });
-
-  // Debounced save while typing.
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let saveTimer = null;
-  ta.addEventListener('input', () => {
-    note.body = ta.value;
-    note.updatedAt = Date.now();
-    refreshLinks();
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      saveNotes();
-      saveTimer = null;
-    }, SAVE_DEBOUNCE_MS);
-  });
-  ta.addEventListener('blur', () => {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-      saveNotes();
-    }
-  });
-
-  del.addEventListener('click', () => {
-    requestDeleteNote(note.id);
-  });
-
+  card.append(meta);
   return card;
 };
 
-const renderEmpty = () => {
-  notesListEl.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'note-empty';
-  const t = document.createElement('p');
-  t.className = 'note-empty-text';
-  t.textContent = 'Нет заметок';
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'note-empty-add';
-  const glyph = document.createElement('span');
-  glyph.className = 'note-empty-add-glyph';
-  glyph.textContent = '+';
-  const label = document.createElement('span');
-  label.textContent = 'Новая заметка';
-  add.append(glyph, label);
-  add.addEventListener('click', addNote);
-  wrap.append(t, add);
-  notesListEl.appendChild(wrap);
-};
-
 export const renderNotes = () => {
-  if (state.notes.length === 0) {
-    renderEmpty();
+  notesListEl.replaceChildren();
+  if (!state.notes.length) {
+    const empty = document.createElement('p');
+    empty.className = 'note-empty-text';
+    empty.textContent = 'Для мыслей, ссылок и всего, что нужно держать под рукой.';
+    const add = document.createElement('button');
+    add.className = 'note-empty-add';
+    add.type = 'button';
+    add.textContent = 'Новая заметка';
+    add.addEventListener('click', addNote);
+    notesListEl.append(empty, add);
   } else {
-    notesListEl.innerHTML = '';
-    // Newest first.
-    const sorted = [...state.notes].sort((a, b) => b.updatedAt - a.updatedAt);
-    sorted.forEach((note) => notesListEl.appendChild(buildNoteCard(note)));
+    [...state.notes]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .forEach((note) => notesListEl.append(buildNoteCard(note)));
   }
   notesCountEl.textContent = String(state.notes.length);
-
-  // Restore pending-delete state after a re-render.
   if (state.pendingNoteDeleteId) {
     const card = notesListEl.querySelector(`.note[data-id="${state.pendingNoteDeleteId}"]`);
-    if (card instanceof HTMLElement) {
-      card.classList.add('is-confirming');
-      const btn = card.querySelector('.note-delete');
-      if (btn) btn.textContent = '× удалить?';
-    } else {
-      state.pendingNoteDeleteId = null;
-      if (state.pendingNoteDeleteTimer) clearTimeout(state.pendingNoteDeleteTimer);
-    }
+    card?.classList.add('is-confirming');
+    const btn = card?.querySelector('.note-delete');
+    if (btn) btn.textContent = 'Удалить?';
   }
 };
 
 export const addNote = () => {
-  const note = createNote();
+  const now = Date.now();
+  const note = { id: generateId('n'), body: '', createdAt: now, updatedAt: now };
   state.notes.unshift(note);
-  if (!state.lastAnimatedNoteIds) state.lastAnimatedNoteIds = new Set();
-  state.lastAnimatedNoteIds.add(note.id);
   saveNotes();
   renderNotes();
-  // Focus the textarea of the freshly created card.
-  const card = notesListEl.querySelector(`.note[data-id="${note.id}"]`);
-  const ta = card?.querySelector('.note-body');
-  if (ta instanceof HTMLTextAreaElement) {
-    ta.focus();
-  }
-};
-
-/** @param {string} id */
-const actuallyDeleteNote = (id) => {
-  state.notes = state.notes.filter((n) => n.id !== id);
-  state.pendingNoteDeleteId = null;
-  if (state.pendingNoteDeleteTimer) clearTimeout(state.pendingNoteDeleteTimer);
-  state.pendingNoteDeleteTimer = null;
-  saveNotes();
-  renderNotes();
+  enterNoteFocus(note.id);
 };
 
 /** @param {string} id */
 export const requestDeleteNote = (id) => {
   if (state.pendingNoteDeleteId === id) {
-    actuallyDeleteNote(id);
+    cancelPendingNoteDelete();
+    state.notes = state.notes.filter((note) => note.id !== id);
+    saveNotes();
+    renderNotes();
     return;
   }
-  document.querySelectorAll('.note.is-confirming').forEach((el) => {
-    el.classList.remove('is-confirming');
-    const b = el.querySelector('.note-delete');
-    if (b) b.textContent = 'удалить';
-  });
-  const card = notesListEl.querySelector(`.note[data-id="${id}"]`);
-  if (!(card instanceof HTMLElement)) return;
-  card.classList.add('is-confirming');
-  const btn = card.querySelector('.note-delete');
-  if (btn) btn.textContent = '× удалить?';
+  cancelPendingNoteDelete();
   state.pendingNoteDeleteId = id;
-  if (state.pendingNoteDeleteTimer) clearTimeout(state.pendingNoteDeleteTimer);
-  state.pendingNoteDeleteTimer = setTimeout(() => {
-    cancelPendingNoteDelete();
-  }, PENDING_DELETE_TIMEOUT_MS);
+  state.pendingNoteDeleteTimer = setTimeout(cancelPendingNoteDelete, PENDING_DELETE_TIMEOUT_MS);
+  renderNotes();
 };
 
 export const cancelPendingNoteDelete = () => {
-  if (!state.pendingNoteDeleteId) return;
-  const card = notesListEl.querySelector(`.note[data-id="${state.pendingNoteDeleteId}"]`);
-  if (card instanceof HTMLElement) {
-    card.classList.remove('is-confirming');
-    const btn = card.querySelector('.note-delete');
-    if (btn) btn.textContent = 'удалить';
-  }
-  state.pendingNoteDeleteId = null;
   if (state.pendingNoteDeleteTimer) clearTimeout(state.pendingNoteDeleteTimer);
   state.pendingNoteDeleteTimer = null;
+  const card = notesListEl.querySelector(`.note[data-id="${state.pendingNoteDeleteId}"]`);
+  card?.classList.remove('is-confirming');
+  const btn = card?.querySelector('.note-delete');
+  if (btn) btn.textContent = '×';
+  state.pendingNoteDeleteId = null;
 };
 
-/** Wire the "+" button to add a note. */
-export const wireAddNoteButton = () => {
-  addNoteBtn.addEventListener('click', addNote);
-};
+export const wireAddNoteButton = () => addNoteBtn.addEventListener('click', addNote);
 
-/** Open the note focus-overlay with a large editor and linkified preview. @param {string} id */
+/** @param {string} id */
 const enterNoteFocus = (id) => {
   const note = state.notes.find((n) => n.id === id);
   if (!note) return;
-  noteFocusOverlay.innerHTML = '';
+  returnFocusId = id;
+  noteFocusOverlay.replaceChildren();
   noteFocusOverlay.hidden = false;
-  noteFocusOverlay.setAttribute('aria-hidden', 'false');
-
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'focus-close';
-  close.textContent = '×';
-  close.setAttribute('aria-label', 'Закрыть');
-  noteFocusOverlay.appendChild(close);
-
   const wrap = document.createElement('div');
   wrap.className = 'note-focus-wrap';
-  noteFocusOverlay.appendChild(wrap);
-
+  const header = document.createElement('header');
+  header.className = 'note-focus-header';
+  const title = document.createElement('h2');
+  title.textContent = 'Заметка';
+  const status = document.createElement('span');
+  status.className = 'note-save-status';
+  status.textContent = 'Сохранено';
+  status.setAttribute('role', 'status');
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'text-button note-focus-copy';
+  copy.textContent = 'Копировать';
+  copy.disabled = !note.body;
+  copy.addEventListener('click', () => void copyNote(note, copy));
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'text-button note-focus-close';
+  close.textContent = 'Закрыть';
+  close.addEventListener('click', exitNoteFocus);
+  header.append(title, status, copy, close);
   const ta = document.createElement('textarea');
   ta.className = 'note-focus-body';
   ta.value = note.body;
+  ta.placeholder = 'Напишите заметку…';
   ta.spellcheck = false;
   ta.setAttribute('aria-label', 'Текст заметки');
-  wrap.appendChild(ta);
-
   const links = document.createElement('div');
   links.className = 'note-links';
-  wrap.appendChild(links);
-
-  const refreshLinks = () => fillLinks(links, note.body);
-  refreshLinks();
-
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let saveTimer = null;
+  fillLinks(links, note.body);
+  wrap.append(header, ta, links);
+  noteFocusOverlay.append(wrap);
+  noteFocusOverlay.showModal();
   ta.addEventListener('input', () => {
     note.body = ta.value;
     note.updatedAt = Date.now();
-    refreshLinks();
+    status.textContent = 'Сохранение…';
+    copy.disabled = !note.body;
+    fillLinks(links, note.body);
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      saveNotes();
-      saveTimer = null;
+      flushNotes();
+      status.textContent = 'Сохранено';
     }, SAVE_DEBOUNCE_MS);
   });
-
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
 };
 
 export const exitNoteFocus = () => {
+  flushNotes();
+  noteFocusOverlay.close();
   noteFocusOverlay.hidden = true;
-  noteFocusOverlay.setAttribute('aria-hidden', 'true');
-  noteFocusOverlay.innerHTML = '';
-  // Re-render so any changes are reflected in the card preview.
+  noteFocusOverlay.replaceChildren();
   renderNotes();
+  const card = notesListEl.querySelector(`.note[data-id="${returnFocusId}"]`);
+  const button = card?.querySelector('.note-open');
+  if (button instanceof HTMLButtonElement) button.focus();
+  returnFocusId = null;
 };
 
-/** Wire close-on-Esc and backdrop click for the note focus-overlay. */
 export const wireNoteFocus = () => {
-  noteFocusOverlay.addEventListener('click', (e) => {
-    const t = e.target;
-    if (!(t instanceof Element)) return;
-    if (t.closest('.focus-close') || t === noteFocusOverlay) exitNoteFocus();
+  noteFocusOverlay.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    exitNoteFocus();
   });
+  window.addEventListener('pagehide', flushNotes);
 };

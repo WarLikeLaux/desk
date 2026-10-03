@@ -32,5 +32,5 @@ export const notesListEl = /** @type {HTMLElement} */ ($('#notesList'));
 export const notesCountEl = /** @type {HTMLElement} */ ($('#notesCount'));
 export const addNoteBtn = /** @type {HTMLButtonElement} */ ($('#addNote'));
 export const copyBtn = /** @type {HTMLButtonElement} */ ($('#copyTasks'));
-export const focusOverlay = /** @type {HTMLElement} */ ($('#focusOverlay'));
-export const noteFocusOverlay = /** @type {HTMLElement} */ ($('#noteFocusOverlay'));
+export const focusOverlay = /** @type {HTMLDialogElement} */ ($('#focusOverlay'));
+export const noteFocusOverlay = /** @type {HTMLDialogElement} */ ($('#noteFocusOverlay'));

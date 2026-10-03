@@ -27,6 +27,7 @@ export const wireTooltips = () => {
     if (
       !(owner instanceof HTMLElement) ||
       !owner.dataset.tooltip ||
+      (owner.hasAttribute('aria-haspopup') && owner.getAttribute('aria-expanded') === 'true') ||
       (owner instanceof HTMLButtonElement && owner.disabled)
     )
       return;
@@ -77,8 +78,16 @@ export const wireTooltips = () => {
       hide();
   });
   document.addEventListener('focusin', (event) => {
-    if (event.target instanceof Element && event.target.matches(':focus-visible'))
-      show(event.target);
+    const target = event.target;
+    // Native popovers can restore focus while their top-layer operation is active.
+    queueMicrotask(() => {
+      if (
+        target instanceof Element &&
+        target === document.activeElement &&
+        target.matches(':focus-visible')
+      )
+        show(target);
+    });
   });
   document.addEventListener('focusout', hide);
   document.addEventListener('pointerdown', hide);

@@ -5,6 +5,8 @@ import { state } from './state.js';
 import { saveTasks } from './storage.js';
 import { renderTasks } from './tasks.js';
 import { formatEstimate, normalizeURL, parseEstimate } from './utils.js';
+import { renderCategoryPicker } from './task-categories.js';
+import { qs } from './dom.js';
 
 const dialog = /** @type {HTMLDialogElement} */ (document.querySelector('#taskEditor'));
 const form = /** @type {HTMLFormElement} */ (document.querySelector('#taskEditorForm'));
@@ -14,8 +16,10 @@ const moveButton = /** @type {HTMLButtonElement} */ (document.querySelector('#mo
 const bucketLabel = /** @type {HTMLElement} */ (document.querySelector('#editTaskBucket'));
 const moveLabel = /** @type {HTMLElement} */ (document.querySelector('#moveTaskBucketLabel'));
 const linksList = /** @type {HTMLElement} */ (document.querySelector('#editTaskLinks'));
+const categoryPicker = /** @type {HTMLElement} */ (document.querySelector('#editTaskCategory'));
 let editingId = /** @type {string | null} */ (null);
 let draftBucket = /** @type {Task['bucket']} */ ('today');
+let draftCategory = /** @type {Task['category']} */ ('work');
 
 const renderBucket = () => {
   bucketLabel.textContent = draftBucket === 'today' ? 'Сегодня' : 'На потом';
@@ -69,6 +73,8 @@ export const openTaskEditor = (id) => {
   estimateInput.value = formatEstimate(task.estimate);
   estimateInput.setCustomValidity('');
   draftBucket = task.bucket;
+  draftCategory = task.category;
+  renderCategoryPicker(categoryPicker, draftCategory);
   renderBucket();
   linksList.replaceChildren();
   task.links.forEach((link) => addLinkRow(link.label, link.url));
@@ -78,6 +84,15 @@ export const openTaskEditor = (id) => {
 };
 
 export const wireTaskEditor = () => {
+  categoryPicker.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('button') : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const category = button.dataset.category;
+    if (category !== 'work' && category !== 'personal') return;
+    draftCategory = category;
+    renderCategoryPicker(categoryPicker, draftCategory);
+    qs(`button[data-category="${category}"]`, categoryPicker)?.focus();
+  });
   dialog.addEventListener('close', () => {
     const button =
       document.querySelector(`.task[data-id="${editingId}"] .task-menu`) ??
@@ -153,6 +168,7 @@ export const wireTaskEditor = () => {
     task.estimate = estimate;
     task.links = links;
     task.bucket = draftBucket;
+    task.category = draftCategory;
     if (task.bucket === 'later') {
       task.completed = false;
       delete task.completedAt;

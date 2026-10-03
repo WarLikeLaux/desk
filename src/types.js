@@ -6,6 +6,7 @@
  * @property {boolean} completed
  * @property {number} createdAt
  * @property {'today' | 'later'} bucket
+ * @property {'work' | 'personal'} category
  * @property {{min: number, max: number} | null} estimate Minutes
  * @property {{label: string, url: string}[]} links
  * @property {number} [completedAt]
@@ -22,7 +23,7 @@
 /**
  * @typedef {Object} HabitsData
  * @property {Habit[]} items
- * @property {boolean} expanded
+ * @property {boolean} expanded Legacy storage field; habits are always visible
  */
 
 /**
@@ -54,6 +55,8 @@
 /**
  * @typedef {'all' | 'active' | 'completed' | 'later'} TaskFilter
  */
+
+/** @typedef {'all' | 'work' | 'personal'} TaskCategoryFilter */
 
 /**
  * @typedef {Object} Note

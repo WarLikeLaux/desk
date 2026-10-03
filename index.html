@@ -20,9 +20,9 @@
   <body>
     <main class="app">
       <aside class="timers" id="timersPanel" aria-label="Таймеры">
-        <header class="timers-header">
-          <span class="timers-label">Таймеры</span>
-          <span class="timers-count" id="timersCount">0</span>
+        <header class="panel-header timers-header">
+          <span class="panel-label timers-label">Таймеры</span>
+          <span class="panel-count timers-count" id="timersCount">0</span>
         </header>
         <div class="timers-list" id="timersList"></div>
         <button class="panel-add timers-add" id="addTimer" type="button">
@@ -63,6 +63,12 @@
               <span class="task-plan-label" id="taskPlanLabel" hidden></span>
             </div>
           </div>
+          <div
+            class="category-picker category-filter"
+            id="taskCategories"
+            role="group"
+            aria-label="Категории задач"
+          ></div>
         </header>
 
         <form class="composer" id="composer" autocomplete="off" novalidate>
@@ -78,6 +84,14 @@
               spellcheck="false"
               aria-label="Название новой задачи"
             />
+            <button
+              class="composer-tool composer-category"
+              id="newTaskCategory"
+              type="button"
+              aria-label="Категория новой задачи"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            ></button>
             <div class="composer-estimate-field" id="composerEstimatePanel" hidden>
               <input
                 id="taskEstimate"
@@ -235,48 +249,104 @@
         </div>
 
         <footer class="footer" id="footer">
-          <span class="remaining" id="remaining">0 осталось</span>
-          <div class="footer-right">
-            <button
-              class="copy"
-              id="copyTasks"
-              type="button"
-              title="Скопировать задачи текущей вкладки"
-            >
-              Скопировать
-            </button>
-            <button class="clear" id="clearCompleted" type="button" hidden>
-              <span class="clear-label">Очистить завершённые</span>
-              <span class="clear-count" id="clearCount">0</span>
-            </button>
+          <div class="footer-default" id="taskFooterDefault">
+            <span class="remaining" id="remaining">0 осталось</span>
+            <div class="footer-right">
+              <button
+                class="copy"
+                id="copyTasks"
+                type="button"
+                title="Скопировать задачи текущей вкладки"
+              >
+                Скопировать
+              </button>
+              <button class="clear" id="clearCompleted" type="button" hidden>
+                <span class="clear-label">Очистить завершённые</span>
+                <span class="clear-count" id="clearCount">0</span>
+              </button>
+            </div>
           </div>
+          <div class="task-bulk" id="taskBulk" hidden>
+            <div
+              class="task-bulk-selection"
+              id="taskBulkSelection"
+              role="group"
+              aria-label="Выбор задач для переноса"
+              hidden
+            >
+              <span class="remaining" id="taskSelectionCount" role="status"></span>
+              <div class="task-bulk-actions">
+                <button class="copy task-bulk-move" id="moveSelectedTasks" type="button" disabled>
+                  <span>На сегодня</span>
+                  <svg
+                    viewBox="0 0 16 16"
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M3 8h10m-4-4 4 4-4 4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            class="composer-tool"
+            id="taskSelectionMore"
+            type="button"
+            aria-label="Действия с отложенными задачами"
+            aria-haspopup="menu"
+            aria-controls="taskSelectionMenu"
+            aria-expanded="false"
+            data-tooltip="Действия с задачами"
+            hidden
+          >
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <circle cx="3" cy="8" r="1" />
+              <circle cx="8" cy="8" r="1" />
+              <circle cx="13" cy="8" r="1" />
+            </svg>
+          </button>
         </footer>
+        <div
+          class="category-picker menu-popover"
+          id="taskSelectionMenu"
+          popover="auto"
+          role="menu"
+          aria-label="Действия с отложенными задачами"
+        >
+          <button class="menu-option" id="selectAllLater" type="button" role="menuitem">
+            Выбрать все
+          </button>
+          <button
+            class="menu-option"
+            id="cancelTaskSelection"
+            type="button"
+            role="menuitem"
+            disabled
+          >
+            Снять выбор
+          </button>
+        </div>
       </section>
 
       <aside class="right-panel notes" id="notesPanel" aria-label="Привычки и заметки">
-        <details class="habits" id="habitsSection" open>
-          <summary class="habits-heading">
-            <svg
-              class="habits-chevron"
-              viewBox="0 0 16 16"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              aria-hidden="true"
-            >
-              <path d="m6 4 4 4-4 4" />
-            </svg>
-            <span>Ежедневные привычки</span>
+        <section class="habits" id="habitsSection" aria-labelledby="habitsHeading">
+          <header class="panel-header habits-heading">
+            <span class="panel-label" id="habitsHeading">Ежедневные привычки</span>
             <span
-              class="habits-count"
+              class="panel-count habits-count"
               id="habitsCount"
               aria-live="polite"
               aria-label="Выполнено привычек сегодня"
               >0 / 0</span
             >
-          </summary>
+          </header>
           <div class="habits-body">
             <ul class="habits-list" id="habitsList" aria-label="Привычки на сегодня"></ul>
             <form class="composer-main" id="habitComposer" autocomplete="off">
@@ -295,10 +365,10 @@
               </button>
             </form>
           </div>
-        </details>
-        <header class="notes-header">
-          <span class="notes-label">заметки</span>
-          <span class="notes-count" id="notesCount">0</span>
+        </section>
+        <header class="panel-header notes-header">
+          <span class="panel-label notes-label">заметки</span>
+          <span class="panel-count notes-count" id="notesCount">0</span>
         </header>
         <div class="notes-list" id="notesList"></div>
         <button class="panel-add notes-add" id="addNote" type="button">
@@ -374,6 +444,15 @@
                 </button>
               </div>
             </div>
+          </div>
+          <div class="editor-field editor-category">
+            <span>Категория</span>
+            <div
+              class="category-picker"
+              id="editTaskCategory"
+              role="group"
+              aria-label="Категория задачи"
+            ></div>
           </div>
           <section class="editor-links" aria-label="Ссылки задачи">
             <div class="editor-links-heading">

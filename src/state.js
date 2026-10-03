@@ -3,6 +3,7 @@
 /** @typedef {import('./types.js').Timer} Timer */
 /** @typedef {import('./types.js').Note} Note */
 /** @typedef {import('./types.js').TaskFilter} TaskFilter */
+/** @typedef {import('./types.js').TaskCategoryFilter} TaskCategoryFilter */
 /** @typedef {import('./types.js').HabitsData} HabitsData */
 
 import { loadTasks, loadTimers, loadNotes, loadHabits } from './storage.js';
@@ -17,6 +18,9 @@ import { loadTasks, loadTimers, loadNotes, loadHabits } from './storage.js';
  *   notes: Note[],
  *   habits: HabitsData,
  *   filter: TaskFilter,
+ *   categoryFilter: TaskCategoryFilter,
+ *   draftTaskCategory: Task['category'] | undefined,
+ *   selectedTaskIds: Set<string>,
  *   pendingDeleteId: string | null,
  *   pendingDeleteTimer: ReturnType<typeof setTimeout> | null,
  *   pendingTimerDeleteId: string | null,
@@ -39,6 +43,9 @@ export const state = {
   notes: loadNotes(),
   habits: loadHabits(),
   filter: 'all',
+  categoryFilter: 'all',
+  draftTaskCategory: undefined,
+  selectedTaskIds: new Set(),
   pendingDeleteId: null,
   pendingDeleteTimer: null,
   pendingTimerDeleteId: null,

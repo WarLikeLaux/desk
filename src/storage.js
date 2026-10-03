@@ -7,8 +7,13 @@
 import { state } from './state.js';
 import { normalizeURL } from './utils.js';
 
-const TASKS_KEY = 'todolist-minimal:v3';
-const TASKS_KEY_PREVIOUS = ['todolist-minimal:v2', 'todolist-minimal:v1'];
+const TASKS_KEY = 'todolist-minimal:v5';
+const TASKS_KEY_PREVIOUS = [
+  'todolist-minimal:v4',
+  'todolist-minimal:v3',
+  'todolist-minimal:v2',
+  'todolist-minimal:v1',
+];
 const TIMERS_KEY = 'todolist-minimal:timers:v3';
 // Previous versions, kept so existing timers survive the upgrade.
 const TIMERS_KEY_PREVIOUS = ['todolist-minimal:timers:v2', 'todolist-minimal:timers:v1'];
@@ -36,6 +41,8 @@ const normalizeTasks = (items) =>
     createdAt: Number.isFinite(task.createdAt) ? task.createdAt : Date.now(),
     ...(Number.isFinite(task.completedAt) ? { completedAt: task.completedAt } : {}),
     bucket: task.bucket === 'later' && !task.completed ? 'later' : 'today',
+    // Missing or uncategorized tasks from v1-v4 migrate to work.
+    category: task.category === 'personal' ? 'personal' : 'work',
     estimate:
       task.estimate &&
       Number.isFinite(task.estimate.min) &&

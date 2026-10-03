@@ -4,6 +4,13 @@ import { parseEstimate, normalizeURL } from './utils.js';
 import { openTaskEditor, wireTaskEditor } from './task-editor.js';
 import { loadTasks, loadTimers, loadNotes, saveTimers } from './storage.js';
 import { renderTasks } from './tasks.js';
+import {
+  renderCategoryPicker,
+  openCategoryPicker,
+  setCategoryButton,
+  closeCategoryPicker,
+} from './task-categories.js';
+import { positionPopover, wirePopoverMenu } from './popovers.js';
 import { renderNotes } from './notes.js';
 import { state } from './state.js';
 import {
@@ -14,6 +21,8 @@ import {
   clearBtn,
   timersListEl,
   addTimerBtn,
+  $,
+  qs,
 } from './dom.js';
 import {
   addTask,
@@ -24,6 +33,13 @@ import {
   setFilter,
   toggleShowAllCompleted,
   copyVisibleTasks,
+  setCategoryFilter,
+  clearTaskSelection,
+  toggleTaskSelection,
+  selectAllLater,
+  moveSelectedTasks,
+  setTaskCategory,
+  currentDraftCategory,
 } from './tasks.js';
 import { copyBtn, focusOverlay, noteFocusOverlay } from './dom.js';
 import { showToast } from './toast.js';
@@ -48,6 +64,16 @@ import { setupAudioUnlock } from './audio.js';
 import { wireReorder } from './reorder.js';
 
 const wireComposer = () => {
+  const categoryButton = /** @type {HTMLButtonElement} */ (
+    document.querySelector('#newTaskCategory')
+  );
+  categoryButton.addEventListener('click', () => {
+    openCategoryPicker(categoryButton, currentDraftCategory(), (category) => {
+      state.draftTaskCategory = category;
+      setCategoryButton(categoryButton, category, 'Категория новой задачи');
+      taskInput.focus();
+    });
+  });
   const estimateInput = /** @type {HTMLInputElement} */ (document.querySelector('#taskEstimate'));
   const linkInput = /** @type {HTMLInputElement} */ (document.querySelector('#taskLink'));
   const linkName = /** @type {HTMLInputElement} */ (document.querySelector('#taskLinkName'));
@@ -175,7 +201,9 @@ const wireComposer = () => {
   const submit = (prepend) => {
     if (!taskInput.value.trim() || !validateEstimate()) return;
     if ((linkInput.value.trim() || linkName.value.trim()) && !attachLink()) return;
-    addTask(taskInput.value, prepend, parseEstimate(estimateInput.value), draftLinks);
+    const category = currentDraftCategory();
+    state.draftTaskCategory = undefined;
+    addTask(taskInput.value, prepend, parseEstimate(estimateInput.value), draftLinks, category);
     taskInput.value = '';
     estimateInput.value = '';
     draftLinks = [];
@@ -239,8 +267,17 @@ const wireTaskList = () => {
     if (!li || !(li instanceof HTMLElement)) return;
     const id = li.dataset.id;
     if (!id) return;
-    if (target.closest('.check')) toggleTask(id);
-    else if (target.closest('.delete')) requestDeleteTask(li, id);
+    const categoryButton = target.closest('.task-category-mark');
+    if (categoryButton instanceof HTMLButtonElement) {
+      const task = state.tasks.find((item) => item.id === id);
+      if (task)
+        openCategoryPicker(categoryButton, task.category, (category) =>
+          setTaskCategory(id, category),
+        );
+    } else if (target.closest('.check')) {
+      if (state.filter === 'later') toggleTaskSelection(id);
+      else toggleTask(id);
+    } else if (target.closest('.delete')) requestDeleteTask(li, id);
     else if (target.closest('.task-edit-button')) openTaskEditor(id);
   });
 
@@ -261,6 +298,16 @@ const wireTaskList = () => {
 };
 
 const wireFilters = () => {
+  const categories = /** @type {HTMLElement} */ (document.querySelector('#taskCategories'));
+  renderCategoryPicker(categories, state.categoryFilter, true);
+  categories.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('button') : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const category = button.dataset.category;
+    if (category !== 'all' && category !== 'work' && category !== 'personal') return;
+    setCategoryFilter(category);
+    qs(`button[data-category="${category}"]`, categories)?.focus();
+  });
   filtersEl.addEventListener('click', (e) => {
     const target = e.target;
     if (!(target instanceof Element)) return;
@@ -268,6 +315,62 @@ const wireFilters = () => {
     if (!(btn instanceof HTMLElement)) return;
     const f = btn.dataset.filter;
     if (f === 'all' || f === 'active' || f === 'completed' || f === 'later') setFilter(f);
+  });
+};
+
+const focusTaskSelectionExit = () => {
+  const more = $('#taskSelectionMore');
+  (more && !more.hidden ? more : $('[data-filter="later"]'))?.focus({ preventScroll: true });
+};
+
+const wireTaskSelection = () => {
+  const menu = /** @type {HTMLElement} */ ($('#taskSelectionMenu'));
+  const more = /** @type {HTMLButtonElement} */ ($('#taskSelectionMore'));
+  /** @param {boolean} [restoreFocus] */
+  const closeMenu = (restoreFocus = false) => {
+    if (menu.matches(':popover-open')) menu.hidePopover();
+    more.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) focusTaskSelectionExit();
+  };
+  wirePopoverMenu(menu, closeMenu);
+  more.addEventListener('click', () => {
+    if (menu.matches(':popover-open')) {
+      closeMenu(true);
+      return;
+    }
+    closeCategoryPicker();
+    const buttons = [...menu.querySelectorAll('button')].filter((button) => !button.disabled);
+    buttons.forEach((button, index) => {
+      button.tabIndex = index === 0 ? 0 : -1;
+    });
+    more.setAttribute('aria-expanded', 'true');
+    menu.showPopover();
+    positionPopover(menu, more, 'end');
+    buttons[0]?.focus({ preventScroll: true });
+  });
+  document.querySelector('#cancelTaskSelection')?.addEventListener('click', () => {
+    closeMenu();
+    clearTaskSelection();
+    focusTaskSelectionExit();
+  });
+  document.querySelector('#selectAllLater')?.addEventListener('click', () => {
+    closeMenu();
+    selectAllLater();
+    focusTaskSelectionExit();
+  });
+  document.querySelector('#moveSelectedTasks')?.addEventListener('click', () => {
+    moveSelectedTasks();
+    focusTaskSelectionExit();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (
+      event.key === 'Escape' &&
+      state.selectedTaskIds.size &&
+      !document.querySelector('dialog[open]')
+    ) {
+      clearTaskSelection();
+      focusTaskSelectionExit();
+    }
   });
 };
 
@@ -432,6 +535,7 @@ export const setupEventListeners = () => {
   wireComposer();
   wireTaskList();
   wireFilters();
+  wireTaskSelection();
   wireClearCompleted();
   wireCopyTasks();
   wireOutsideClicks();

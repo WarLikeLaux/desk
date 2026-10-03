@@ -8,7 +8,6 @@ import { showToast } from './toast.js';
 import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
 import { createReorderHandle, wireReorder } from './reorder.js';
 
-const section = /** @type {HTMLDetailsElement} */ (document.querySelector('#habitsSection'));
 const list = /** @type {HTMLUListElement} */ (document.querySelector('#habitsList'));
 const count = /** @type {HTMLElement} */ (document.querySelector('#habitsCount'));
 const composer = /** @type {HTMLFormElement} */ (document.querySelector('#habitComposer'));
@@ -70,7 +69,6 @@ const buildHabit = (habit) => {
     state.habits.items.length < 2 || editingId !== null,
   );
   move.dataset.action = 'move';
-  row.append(move);
   const check = actionButton(
     'toggle',
     `${done ? 'Снять отметку за сегодня' : 'Выполнено сегодня'}: ${habit.text}`,
@@ -121,6 +119,7 @@ const buildHabit = (habit) => {
       ),
     );
   }
+  row.insertBefore(move, row.children[2]);
   setDeleteButtonState(row.querySelector('.habit-delete'), pendingDeleteId === habit.id);
   return row;
 };
@@ -146,7 +145,6 @@ export const renderHabits = () => {
     'aria-label',
     `Выполнено привычек сегодня: ${done} из ${state.habits.items.length}`,
   );
-  section.open = state.habits.expanded;
   const rows = Array.from(list.children);
   const row =
     rows.find((row) => row instanceof HTMLElement && row.dataset.id === focusedId) ??
@@ -199,11 +197,6 @@ export const wireHabits = () => {
     items: () => state.habits.items,
     save: saveHabits,
     render: renderHabits,
-  });
-  section.addEventListener('toggle', () => {
-    if (state.habits.expanded === section.open) return;
-    state.habits.expanded = section.open;
-    saveHabits();
   });
   composer.addEventListener('submit', (event) => {
     event.preventDefault();

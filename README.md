@@ -22,14 +22,16 @@ The layout has three columns: timers, tasks, and notes with habits. On desktop, 
 - **×** requests deletion confirmation. Click again within three seconds to delete.
 - **Очистить завершённые** removes completed tasks with an Undo toast.
 - **Filters**: Все / Активные / Завершённые / На потом.
+- **Categories**: Все / Работа / Личное, independently of the list filter. Every task belongs to «Работа» or «Личное». Counts, remaining estimates, copying, and clearing completed tasks follow the selected category. New tasks inherit it, with «Работа» as the default in the all-view. The category icon in each task row opens a small menu that saves the choice immediately. The same icon beside the new-task input sets its category before adding. Category selection also remains in the editor. Existing uncategorized tasks migrate to «Работа». Timers, habits, and notes are shared.
+- Checkmarks in **На потом** select tasks for transfer without completing them. Click **На сегодня** in the bottom row to transfer the selection. Its menu ⋯ offers **Выбрать все** for the current category and **Снять выбор**. Esc also clears the selection. Transfer preserves categories, estimates, links, and relative order, and the toast provides Undo.
 
 **Cmd/Ctrl + K** focuses the task input. Typing outside editors and dialogs also focuses it. **Esc** clears the input.
 
 ## Daily habits
 
-A collapsible section above the notes in the right column holds daily habits. Enter a name and press Enter to add one. The habit day starts at 09:00 in Omsk (Asia/Omsk), regardless of the device timezone. Checkmarks remain through the night and reset at 09:00. Habit names and completion history remain saved. Habit counts are separate from task progress.
+A section above the notes in the right column holds daily habits and stays visible. Enter a name and press Enter to add one. The habit day starts at 09:00 in Omsk (Asia/Omsk), regardless of the device timezone. Checkmarks remain through the night and reset at 09:00. Habit names and completion history remain saved. Habit counts are separate from task progress.
 
-The pencil button renames a habit inline. Enter saves, Esc cancels. Deletion requires a second click and offers Undo afterward. Habits, completion dates, and the section's expanded state persist across reloads.
+The pencil button renames a habit inline. Enter saves, Esc cancels. Deletion requires a second click and offers Undo afterward. Habits and completion dates persist across reloads.
 
 Drag a habit's dotted handle with a mouse or touch to reorder it. With the handle focused, the up and down arrows move the habit. The order persists across reloads without changing completion dates. The handle and reorder behavior are shared with timers and notes.
 
@@ -58,10 +60,10 @@ The right column shows short previews. Click a preview or the expand icon to ope
 
 Four localStorage keys, plain JSON:
 
-- `todolist-minimal:v3`: tasks, estimates, links, and list membership
+- `todolist-minimal:v5`: tasks, categories, estimates, links, and list membership
 - `todolist-minimal:timers:v3`: timers
 - `todolist-minimal:notes:v1`: notes
-- `todolist-minimal:habits:v1`: habits, completion dates, and expanded state
+- `todolist-minimal:habits:v1`: habits and completion dates, with the legacy expanded state retained for storage compatibility
 
 Older task and timer versions migrate automatically. Clearing site data clears the workspace. Export, backups, and synchronization between devices are not implemented. Follow-up ideas are recorded in [IDEAS.md](IDEAS.md).
 
@@ -115,6 +117,8 @@ desk/
 │   ├── notifications.js        # Native notifications
 │   ├── tasks.js                # Task CRUD, rendering, deferral
 │   ├── task-editor.js          # Task name, estimate, and link editor
+│   ├── task-categories.js      # Shared category picker and icons
+│   ├── popovers.js             # Shared menu positioning and keyboard navigation
 │   ├── habits.js               # Daily habits and completion dates
 │   ├── notes.js                # Note previews and full-screen editor
 │   ├── reorder.js              # Pointer and keyboard reordering of notes and timers

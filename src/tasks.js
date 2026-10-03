@@ -2,13 +2,16 @@
 import { initDeleteButton, setDeleteButtonState } from './delete-button.js';
 /** @typedef {import('./types.js').Task} Task */
 /** @typedef {import('./types.js').TaskFilter} TaskFilter */
+/** @typedef {import('./types.js').TaskCategoryFilter} TaskCategoryFilter */
 
 import { state } from './state.js';
 import { saveTasks } from './storage.js';
 import { pluralize, generateId, renderTextWithLinks, formatEstimate, copyText } from './utils.js';
 import { showToast } from './toast.js';
+import { renderCategoryPicker, setCategoryButton, closeCategoryPicker } from './task-categories.js';
 import {
   $,
+  qs,
   taskList,
   emptyState,
   emptyTitle,
@@ -25,9 +28,22 @@ const PENDING_DELETE_TIMEOUT_MS = 3000;
 
 const COMPLETED_COLLAPSE_MAX = 3;
 
+export const currentDraftCategory = () =>
+  state.draftTaskCategory !== undefined
+    ? state.draftTaskCategory
+    : state.categoryFilter === 'all'
+      ? 'work'
+      : state.categoryFilter;
+
+/** @returns {Task[]} */
+const categoryTasks = () =>
+  state.tasks.filter(
+    (task) => state.categoryFilter === 'all' || task.category === state.categoryFilter,
+  );
+
 /** @returns {Task[]} */
 const currentTasks = () =>
-  state.tasks.filter((task) =>
+  categoryTasks().filter((task) =>
     state.filter === 'later' ? task.bucket === 'later' : task.bucket === 'today',
   );
 
@@ -94,16 +110,25 @@ const placeTaskInOrder = (task) => {
  * @param {boolean} [prepend=false] When true, insert at the very top of the list.
  * @param {Task['estimate']} [estimate]
  * @param {Task['links']} [links]
+ * @param {Task['category']} [category]
  */
-export const addTask = (text, prepend = false, estimate = null, links = []) => {
+export const addTask = (
+  text,
+  prepend = false,
+  estimate = null,
+  links = [],
+  category = currentDraftCategory(),
+) => {
   const clean = text.trim();
   if (!clean) return;
+  if (state.categoryFilter !== 'all' && state.categoryFilter !== category) setCategoryFilter('all');
   const task = {
     id: generateId('t'),
     text: clean,
     completed: false,
     createdAt: Date.now(),
     bucket: /** @type {'today' | 'later'} */ (state.filter === 'later' ? 'later' : 'today'),
+    category,
     estimate,
     links,
   };
@@ -179,10 +204,11 @@ export const cancelPendingTaskDelete = () => {
 };
 
 export const clearCompleted = () => {
-  const removed = state.tasks.filter((t) => t.completed);
+  const removed = categoryTasks().filter((t) => t.completed);
   if (removed.length === 0) return;
   cancelPendingTaskDelete();
-  state.tasks = state.tasks.filter((t) => !t.completed);
+  const removedIds = new Set(removed.map((task) => task.id));
+  state.tasks = state.tasks.filter((t) => !removedIds.has(t.id));
   saveTasks();
   renderTasks();
   showToast(
@@ -199,8 +225,10 @@ export const clearCompleted = () => {
 /** @param {Task} task @returns {HTMLElement} */
 const buildTaskEl = (task) => {
   const li = document.createElement('li');
-  li.className = `task${task.completed ? ' is-done' : ''}`;
-  li.draggable = true;
+  const selecting = state.filter === 'later';
+  const selected = selecting && state.selectedTaskIds.has(task.id);
+  li.className = `task${task.completed ? ' is-done' : ''}${selected ? ' is-selected' : ''}`;
+  li.draggable = !(selecting && state.selectedTaskIds.size > 0);
   li.dataset.id = task.id;
   if (state.lastAnimatedIds.has(task.id)) {
     li.classList.add('is-new');
@@ -214,13 +242,17 @@ const buildTaskEl = (task) => {
   li.appendChild(handle);
 
   const check = document.createElement('button');
-  check.className = `check${task.completed ? ' is-checked' : ''}`;
+  check.className = `check${(selecting ? selected : task.completed) ? ' is-checked' : ''}`;
   check.type = 'button';
   check.setAttribute(
     'aria-label',
-    task.completed ? 'Отметить как невыполненную' : 'Отметить как выполненную',
+    selecting
+      ? `${selected ? 'Снять выбор' : 'Выбрать задачу'} «${task.text}»`
+      : task.completed
+        ? 'Отметить как невыполненную'
+        : 'Отметить как выполненную',
   );
-  check.setAttribute('aria-pressed', String(task.completed));
+  check.setAttribute('aria-pressed', String(selecting ? selected : task.completed));
   check.innerHTML =
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 5"/></svg>';
   li.appendChild(check);
@@ -245,7 +277,15 @@ const buildTaskEl = (task) => {
   text.className = 'task-text';
   text.title = task.text;
   text.appendChild(renderTextWithLinks(task.text, document));
-  content.appendChild(text);
+  const titleLine = document.createElement('div');
+  titleLine.className = 'task-title-line';
+  const category = document.createElement('button');
+  category.type = 'button';
+  category.className = 'task-category-mark';
+  setCategoryButton(category, task.category, `Категория задачи «${task.text}»`);
+  titleLine.append(category);
+  titleLine.append(text);
+  content.appendChild(titleLine);
   li.appendChild(content);
 
   const estimate = document.createElement('button');
@@ -279,11 +319,25 @@ const buildTaskEl = (task) => {
 };
 
 export const renderTasks = () => {
+  closeCategoryPicker();
+  const selectionMenu = $('#taskSelectionMenu');
+  if (selectionMenu?.matches(':popover-open')) selectionMenu.hidePopover();
+  $('#taskSelectionMore')?.setAttribute('aria-expanded', 'false');
+  setCategoryButton(
+    /** @type {HTMLButtonElement} */ (document.querySelector('#newTaskCategory')),
+    currentDraftCategory(),
+    'Категория новой задачи',
+  );
   document
     .querySelectorAll('.task.is-confirming')
     .forEach((el) => el.classList.remove('is-confirming'));
 
   const visible = visibleTasks();
+  const visibleIds = new Set(visible.map((task) => task.id));
+  state.selectedTaskIds.forEach((id) => {
+    if (!visibleIds.has(id)) state.selectedTaskIds.delete(id);
+  });
+  renderTaskSelection();
   taskList.innerHTML = '';
   visible.forEach((task) => taskList.appendChild(buildTaskEl(task)));
 
@@ -318,10 +372,10 @@ export const renderTasks = () => {
     }
   }
 
-  const today = state.tasks.filter((t) => t.bucket === 'today');
+  const today = categoryTasks().filter((t) => t.bucket === 'today');
   const activeCount = today.filter((t) => !t.completed).length;
   const completedCount = today.filter((t) => t.completed).length;
-  const laterCount = state.tasks.filter((t) => t.bucket === 'later').length;
+  const laterCount = categoryTasks().filter((t) => t.bucket === 'later').length;
   const isLater = state.filter === 'later';
   const unfinishedTasks = (isLater ? currentTasks() : today).filter((task) => !task.completed);
   const unfinished = { min: 0, max: 0 };
@@ -413,6 +467,7 @@ export const renderTasks = () => {
 /** Set the active filter and re-render. @param {TaskFilter} f */
 export const setFilter = (f) => {
   state.filter = f;
+  state.selectedTaskIds.clear();
   state.showAllCompleted = false;
   document.querySelectorAll('.filter').forEach((el) => el.classList.remove('is-active'));
   const active = /** @type {HTMLElement | null} */ ($(`[data-filter="${f}"]`));
@@ -423,4 +478,117 @@ export const setFilter = (f) => {
   taskList.scrollTop = 0;
   cancelPendingTaskDelete();
   renderTasks();
+};
+
+/** @param {TaskCategoryFilter} category */
+export const setCategoryFilter = (category) => {
+  state.categoryFilter = category;
+  state.draftTaskCategory = undefined;
+  state.selectedTaskIds.clear();
+  state.showAllCompleted = false;
+  cancelPendingTaskDelete();
+  renderCategoryPicker(
+    /** @type {HTMLElement} */ (document.querySelector('#taskCategories')),
+    category,
+    true,
+  );
+  taskList.scrollTop = 0;
+  renderTasks();
+};
+
+/** @param {string} id @param {Task['category']} category */
+export const setTaskCategory = (id, category) => {
+  const task = state.tasks.find((item) => item.id === id);
+  if (!task) return;
+  task.category = category;
+  saveTasks();
+  renderTasks();
+  const anchor =
+    qs(`.task[data-id="${id}"] .task-category-mark`, taskList) ??
+    $(`#taskCategories [data-category="${state.categoryFilter}"]`);
+  anchor?.focus({ preventScroll: true });
+};
+
+const renderTaskSelection = () => {
+  const available = currentTasks();
+  const isLater = state.filter === 'later';
+  const hasSelection = isLater && state.selectedTaskIds.size > 0;
+  taskList.classList.toggle('is-selecting', hasSelection);
+  const defaultFooter = /** @type {HTMLElement} */ (document.querySelector('#taskFooterDefault'));
+  defaultFooter.hidden = hasSelection;
+  const toolbar = /** @type {HTMLElement} */ (document.querySelector('#taskBulk'));
+  toolbar.hidden = !hasSelection;
+  const more = /** @type {HTMLButtonElement} */ (document.querySelector('#taskSelectionMore'));
+  more.hidden = !isLater || available.length === 0;
+  const controls = /** @type {HTMLElement} */ (document.querySelector('#taskBulkSelection'));
+  controls.hidden = !hasSelection;
+  const all = /** @type {HTMLButtonElement} */ (document.querySelector('#selectAllLater'));
+  const allSelected =
+    available.length > 0 && available.every((task) => state.selectedTaskIds.has(task.id));
+  all.disabled = available.length === 0 || allSelected;
+  const clear = /** @type {HTMLButtonElement} */ (document.querySelector('#cancelTaskSelection'));
+  clear.disabled = !hasSelection;
+  const count = /** @type {HTMLElement} */ (document.querySelector('#taskSelectionCount'));
+  count.textContent = `Выбрано: ${state.selectedTaskIds.size}`;
+  const move = /** @type {HTMLButtonElement} */ (document.querySelector('#moveSelectedTasks'));
+  move.disabled = state.selectedTaskIds.size === 0;
+};
+
+export const clearTaskSelection = () => {
+  state.selectedTaskIds.clear();
+  cancelPendingTaskDelete();
+  renderTasks();
+};
+
+/** @param {string} id */
+export const toggleTaskSelection = (id) => {
+  if (state.filter !== 'later' || !currentTasks().some((task) => task.id === id)) return;
+  if (state.selectedTaskIds.has(id)) state.selectedTaskIds.delete(id);
+  else state.selectedTaskIds.add(id);
+  renderTasks();
+  qs(`.task[data-id="${id}"] .check`, taskList)?.focus();
+};
+
+export const selectAllLater = () => {
+  if (state.filter !== 'later') return;
+  const available = currentTasks();
+  state.selectedTaskIds = new Set(available.map((task) => task.id));
+  renderTasks();
+};
+
+export const moveSelectedTasks = () => {
+  if (state.filter !== 'later') return;
+  const moved = currentTasks().filter((task) => state.selectedTaskIds.has(task.id));
+  if (!moved.length) return;
+  const originalPositions = new Map(state.tasks.map((task, index) => [task.id, index]));
+  const movedIds = new Set(moved.map((task) => task.id));
+  state.tasks = state.tasks.filter((task) => !movedIds.has(task.id));
+  moved.forEach((task) => {
+    task.bucket = 'today';
+  });
+  const firstCompleted = state.tasks.findIndex((task) => task.completed);
+  state.tasks.splice(firstCompleted < 0 ? state.tasks.length : firstCompleted, 0, ...moved);
+  state.selectedTaskIds.clear();
+  saveTasks();
+  renderTasks();
+  showToast(
+    `На сегодня: ${moved.length} ${pluralize(moved.length, ['задача', 'задачи', 'задач'])}`,
+    () => {
+      const restored = state.tasks.filter(
+        (task) => movedIds.has(task.id) && task.bucket === 'today' && !task.completed,
+      );
+      const restoredIds = new Set(restored.map((task) => task.id));
+      state.tasks = state.tasks.filter((task) => !restoredIds.has(task.id));
+      restored.forEach((task) => {
+        task.bucket = 'later';
+        state.tasks.splice(
+          Math.min(originalPositions.get(task.id) ?? state.tasks.length, state.tasks.length),
+          0,
+          task,
+        );
+      });
+      saveTasks();
+      renderTasks();
+    },
+  );
 };

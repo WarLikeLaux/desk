@@ -23,8 +23,18 @@ const RESET_ICON =
 
 /** @param {HTMLElement} button @param {Timer} timer */
 const updatePhaseAction = (button, timer) => {
+  if (button.dataset.phase === timer.phase) return;
+  button.dataset.phase = timer.phase;
   const label = qs('.timer-phase-switch-label', button);
   if (label) label.textContent = nextPhaseLabel(timer);
+  button
+    .querySelector('path')
+    ?.setAttribute(
+      'd',
+      timer.phase === 'work'
+        ? 'M3 7h10v5a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7Zm10 1h2a3 3 0 1 1 0 6h-2M6 2v2M10 2v2M2 18h13'
+        : 'M7 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 6h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM2 10a20 20 0 0 0 16 0M10 10v3',
+    );
 };
 
 /** @param {Timer} timer */
@@ -547,7 +557,7 @@ const buildTimerCard = (timer) => {
     phaseButton.className = 'timer-phase-switch';
     phaseButton.type = 'button';
     phaseButton.innerHTML =
-      '<span class="timer-phase-switch-label"></span><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h10m-3-3 3 3-3 3M13 11H3m3-3-3 3 3 3" /></svg>';
+      '<svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path /></svg><span class="timer-phase-switch-label"></span>';
     updatePhaseAction(phaseButton, timer);
   }
 

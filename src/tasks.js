@@ -338,7 +338,10 @@ export const renderTasks = () => {
   });
   const planEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlan'));
   const valueEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlanValue'));
+  const prefixEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlanPrefix'));
   const labelEl = /** @type {HTMLElement} */ (document.querySelector('#taskPlanLabel'));
+  prefixEl.textContent = unfinishedTasks.length === 1 ? 'Осталась задача на' : 'Осталось задач на';
+  prefixEl.hidden = estimatedCount === 0;
   const estimateText = formatEstimate(unfinished);
   const splitRange =
     unfinished.min !== unfinished.max &&
